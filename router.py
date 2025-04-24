@@ -21,14 +21,14 @@ dispatcher = {
     "total_horas_extras_por_ano": total_horas_extras_por_ano,
     "comparar_liquido_entre_meses": comparar_liquido_entre_meses,
     "maior_salario_bruto": maior_salario_bruto,
-    "mes_maior_liquido": mes_maior_liquido,
-    "maior_desconto_percentual": maior_desconto_percentual,
-    "meses_liquido_acima_percentual": meses_liquido_acima_percentual,
-    "meses_com_bonificacao_acima": meses_com_bonificacao_acima,
-    "inss_em_mes_ano": inss_em_mes_ano,
-    "irrf_em_mes_ano": irrf_em_mes_ano,
-    "total_fgts_ano": total_fgts_ano,
-    "meses_com_liquido_maior_que": meses_com_liquido_maior_que
+    # "mes_maior_liquido": mes_maior_liquido,
+    # "maior_desconto_percentual": maior_desconto_percentual,
+    # "meses_liquido_acima_percentual": meses_liquido_acima_percentual,
+    # "meses_com_bonificacao_acima": meses_com_bonificacao_acima,
+    # "inss_em_mes_ano": inss_em_mes_ano,
+    # "irrf_em_mes_ano": irrf_em_mes_ano,
+    # "total_fgts_ano": total_fgts_ano,
+    # "meses_com_liquido_maior_que": meses_com_liquido_maior_que
 }
 
 def extrair_mes_ano(mensagem: str):
@@ -112,3 +112,9 @@ def identificar_intencao(mensagem: str):
         return "maior_desconto_percentual", {}
 
     return None, {}
+
+
+#tool responsavel pela RAG de documentos
+# 
+#técnica de RAG
+#Documentos legislativos
