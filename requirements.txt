@@ -1,8 +1,5 @@
-langchain
-langchain-openai
-langchain-chroma
-chromadb
 openai
 python-dotenv
 pandas
 streamlit
+pydantic
