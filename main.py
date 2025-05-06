@@ -29,6 +29,12 @@ def get_informacoesCabecalho():
     print(cabecalho)
     return {"informações_presentes": cabecalho}
 
+def get_MaiorComissao():
+    """Essa função envia a maior comissão do colaborador dentro de todo seu periodo na empresa"""
+    maior = float(df["Comissão"].max())
+    print(maior)
+    return {"maior_comissao": maior}
+
 # --------------------------------------------------------------
 # Step 1: Call model with the funcion tool define
 # --------------------------------------------------------------
@@ -61,6 +67,20 @@ tools = [
             },
             "strict": True,
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_MaiorComissao",
+            "description": "Retorna a maior comissao do colaborador dentro de todo o tempo de empresa.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
     }
 ]
 
@@ -68,7 +88,7 @@ system_prompt = "Voce responde questões sobre a folha de pagamento."
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Quais os dados presentes na folha de pagamento?"},
+    {"role": "user", "content": "Qual são os dados presentes da folha de pagamento?"},
 ]
 
 completion = client.chat.completions.create(
@@ -93,6 +113,8 @@ def call_function(name, args):
         return get_SalarioBaseMedia()
     elif name == "get_informacoesCabecalho":
         return get_informacoesCabecalho()
+    elif name == "get_MaiorComissao":
+        return get_MaiorComissao()
 
 
 for tool_call in completion.choices[0].message.tool_calls:
