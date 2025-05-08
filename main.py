@@ -33,9 +33,10 @@ rag_chain = RetrievalQA.from_chain_type(
 # Funções com base em CSV e RAG
 # --------------------------------------------------------------
 
-def consultar_documento_pdf(pergunta: str) -> dict:
+def consultar_documento_txt_ou_pdf(pergunta: str) -> dict:
     resposta = rag_chain.run(pergunta)
-    return {"resposta_pdf": resposta}
+    return {"resposta": resposta}
+
 
 def get_SalarioBaseMedia():
     media = round(df["Salário Base"].mean(), 2)
@@ -51,6 +52,8 @@ def get_Maior(coluna: str) -> dict:
 
 def get_total(coluna: str) -> dict:
     total = int(round(df[coluna].sum(), 2))
+    # print(total)
+    # print(coluna)
     return {f"total_{coluna}": total}
 
 def get_evolucao(coluna: str) -> dict:
@@ -269,14 +272,14 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "consultar_documento_pdf",
-            "description": "Consulta os documentos em PDF indexados para responder perguntas que não envolvem os dados númericos do holerite.",
+            "name": "consultar_documento_txt_ou_pdf",
+            "description": "Consulta os documentos (PDF ou TXT) indexados para responder perguntas não-numéricas sobre a folha.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "pergunta": {
                         "type": "string",
-                        "description": "Pergunta feita sobre os documentos em PDF, como 'O que é CBO?', 'Como funciona o IRRF?' ou 'Como funciona o calculo do IRRF?'."
+                        "description": "Pergunta sobre os documentos, como 'O que é FGTS?' ou 'Como é a tabela do IRRF?'."
                     }
                 },
                 "required": ["pergunta"],
@@ -305,12 +308,13 @@ system_prompt = (
     "Sempre responda com base apenas nos dados do colaborador atual.\n"
     f"{prompt_colunas}\n"
     "Use as funções disponíveis quando necessário para calcular ou buscar as informações corretamente."
+    "Você pode consultar documentos PDF e textos técnicos (como explicações sobre FGTS, CBO etc) que foram carregados na base vetorial."
 )
 
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Como é a tabela do IRRF?"},
+    {"role": "user", "content": "Qual o total de horas extras feitas pelo colaborador no periodo de empresa?"},
 ]
 
 completion = client.chat.completions.create(
@@ -353,9 +357,8 @@ def call_function(name, args):
             args["mes_final"],
             args["ano_final"]
         )
-    elif name == "consultar_documento_pdf":
-        return consultar_documento_pdf(args["pergunta"])
-   
+    elif name == "consultar_documento_txt_ou_pdf":
+        return consultar_documento_txt_ou_pdf(args["pergunta"])
 
 
 for tool_call in completion.choices[0].message.tool_calls:
@@ -373,16 +376,21 @@ for tool_call in completion.choices[0].message.tool_calls:
 # Step 4: Generic response with pydantic
 # --------------------------------------------------------------
 
-class RespostaGenerica(BaseModel):
-    response: str = Field(description="Uma resposta em linguagem natural explicando o resultado da função.")
+messages.append({
+    "role": "user",
+    "content": (
+        "Revise a resposta anterior. Corrija erros de português, melhore a fluidez e complete com base em seu conhecimento "
+        "caso a explicação esteja incompleta, pouco clara ou superficial."
+    )
+})
 
+class RespostaFinalMelhorada(BaseModel):
+    response: str = Field(description="Uma resposta clara, corrigida e completa sobre o assunto.")
 
 completion_2 = client.beta.chat.completions.parse(
     model="gpt-4.1-nano",
     messages=messages,
-    tools=tools,
-    tool_choice="none",  # ← força o modelo a não chamar nenhuma função agora
-    response_format=RespostaGenerica,
+    response_format=RespostaFinalMelhorada
 )
 # --------------------------------------------------------------
 # Step 5: Check model response
