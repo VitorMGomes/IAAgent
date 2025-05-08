@@ -3,88 +3,95 @@ import os
 import pandas as pd
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+
+from langchain_community.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+
+load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 df = pd.read_csv("data/Dados.csv")
 
 # --------------------------------------------------------------
-# Defining the functions we want to call
+# Base Vetorial para RAG
+# --------------------------------------------------------------
+retriever = Chroma(
+    persist_directory="./chrome_langchain_db",
+    embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+).as_retriever()
+
+rag_chain = RetrievalQA.from_chain_type(
+    llm=ChatOpenAI(openai_api_key=os.getenv("OPENAI_API_KEY"), temperature=0),
+    retriever=retriever,
+    return_source_documents=False
+)
+
+# --------------------------------------------------------------
+# Funções com base em CSV e RAG
 # --------------------------------------------------------------
 
+def consultar_documento_pdf(pergunta: str) -> dict:
+    resposta = rag_chain.run(pergunta)
+    return {"resposta_pdf": resposta}
 
 def get_SalarioBaseMedia():
-    """Essa é uma função que retorna a média do salario base dentro do periodo total que o colaborador esteve na empresa"""
     media = round(df["Salário Base"].mean(), 2)
     return {"media_salario_base": media}
 
 def get_informacoesCabecalho():
-    """Essa função retorna quais informações estão presentes na folha de pagamento (coluna do CSV), como descontos legais e beneficios concedidos"""
     cabecalho = df.columns.tolist()
     return {"informações_presentes": cabecalho}
 
 def get_Maior(coluna: str) -> dict:
-    """Essa função envia a maior ['coluna'] do colaborador dentro de todo seu periodo na empresa"""
     maior = float(df[coluna].max())
     return {"maior_comissao": maior}
 
 def get_total(coluna: str) -> dict:
-    """Retorna o total (soma) dos valores da coluna especificada para o colaborador filtrado."""
     total = int(round(df[coluna].sum(), 2))
     return {f"total_{coluna}": total}
 
 def get_evolucao(coluna: str) -> dict:
-    """Retorna a evolução mês a mês dos valores da coluna especificada para o colaborador filtrado."""
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
     historico = list(zip(
         dados_ordenados["Mês"] + "-" + dados_ordenados["Ano"].astype(str),
         dados_ordenados[coluna]
     ))
-
     return {f"evolucao_{coluna}": historico}
 
 def get_mes_ano(coluna: str, mes: str, ano: int) -> dict:
-    """Retorna o valor de uma coluna para um determinado mês e ano do colaborador filtrado."""
     linha = df[(df["Mês"] == mes) & (df["Ano"] == ano)]
     if linha.empty:
         return {f"{coluna}_{mes}_{ano}": None}
-
     valor = float(linha[coluna].values[0])
     return {f"{coluna}_{mes}_{ano}": valor}
 
 def get_crescimento_percentual(coluna: str) -> dict:
-    """Retorna o crescimento percentual dos valores da coluna do primeiro ao último mês."""
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
     if len(dados_ordenados) < 2:
         return {f"crescimento_percentual_{coluna}": 0.0}
     inicial = dados_ordenados[coluna].iloc[0]
     final = dados_ordenados[coluna].iloc[-1]
-
     if inicial == 0:
         return {f"crescimento_percentual_{coluna}": 0.0}
-
     crescimento = ((final - inicial) / inicial) * 100
     return {f"crescimento_percentual_{coluna}": round(crescimento, 2)}
 
 def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o crescimento percentual entre dois períodos para a coluna indicada."""
     dados = df.copy()
     dados_inicial = dados[(dados["Mês"] == mes_inicial) & (dados["Ano"] == ano_inicial)]
     dados_final = dados[(dados["Mês"] == mes_final) & (dados["Ano"] == ano_final)]
-
     if dados_inicial.empty or dados_final.empty:
         return {"erro": "Período inicial ou final não encontrado nos dados."}
-
     valor_inicial = dados_inicial[coluna].values[0]
     valor_final = dados_final[coluna].values[0]
-
     if valor_inicial == 0:
         return {f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": 0.0}
-
     crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
     return {
-        f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}":
-        round(crescimento, 2)
+        f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": round(crescimento, 2)
     }
 
 
@@ -258,10 +265,36 @@ tools = [
             },
             "strict": True
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_documento_pdf",
+            "description": "Consulta os documentos em PDF indexados para responder perguntas que não envolvem os dados númericos do holerite.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pergunta": {
+                        "type": "string",
+                        "description": "Pergunta feita sobre os documentos em PDF, como 'O que é CBO?', 'Como funciona o IRRF?' ou 'Como funciona o calculo do IRRF?'."
+                    }
+                },
+                "required": ["pergunta"],
+                "additionalProperties": False
+            },
+            "strict": True
+        }
     }
 
    
 ]
+
+
+retriever = Chroma(
+    persist_directory="./chrome_langchain_db",
+    embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+).as_retriever()
+
 
 cabecalho = df.columns.tolist()
 prompt_colunas = f"Essas são as colunas disponíveis na folha de pagamento: {', '.join(cabecalho)}."
@@ -277,7 +310,7 @@ system_prompt = (
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Qual o crescimento percentual das Comissões de Janeiro de 2021 ate Julho de 2021?"},
+    {"role": "user", "content": "Como é a tabela do IRRF?"},
 ]
 
 completion = client.chat.completions.create(
@@ -320,6 +353,9 @@ def call_function(name, args):
             args["mes_final"],
             args["ano_final"]
         )
+    elif name == "consultar_documento_pdf":
+        return consultar_documento_pdf(args["pergunta"])
+   
 
 
 for tool_call in completion.choices[0].message.tool_calls:
