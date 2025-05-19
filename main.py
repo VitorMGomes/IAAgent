@@ -314,7 +314,7 @@ system_prompt = (
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Qual o total de horas extras feitas pelo colaborador no periodo de empresa?"},
+    {"role": "user", "content": "Qual foi o foi crescimento percentual do Salario Base do colaborador entre Janeiro de 2021 e Março de 2022?"},
 ]
 
 completion = client.chat.completions.create(
