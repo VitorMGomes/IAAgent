@@ -1,256 +1,43 @@
-8. Salário Base
+def consultar_documento_txt_ou_pdf(pergunta: str) -> dict: # consulta o documento para responder perguntas sobre informações gerais não presentes no CSV
 
+def get_informacoesCabecalho() -> dict: # retorna o cabeçalho com os nomes das colunas do CSV
 
-get_evolucao_salario_base
-get_total_salario_base
-get_crescimento_percentual_salario_base
-get_qtd_mudancas_salario_base
-get_meses_com_salario_acima
-get_salario_base_mensal
+def get_Media(coluna: str) -> dict: # retorna a média de toda a coluna pesquisada
 
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-9. Comissão
+def get_Media_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna a média no período mes/ano - mes/ano pesquisado
 
+def get_Media_Ultimo(coluna: str, meses: int) -> dict: # retorna a média da coluna solicitada do último período em meses
 
-get_total_comissao
-get_evolucao_comissao
-get_crescimento_percentual_comissao
-get_meses_com_comissao
-get_meses_sem_comissao
-get_qtd_mudancas_comissao
-get_comissao_mes_ano
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-10. Valores Adicionais
+def get_Maior(coluna: str) -> dict: # retorna o maior elemento na coluna juntamente com seu mês e ano
 
+def get_Maior_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna o maior elemento dentro de um período juntamente com seu mês e ano
 
-get_total_valores_adicionais
-get_evolucao_valores_adicionais
-get_crescimento_percentual_valores_adicionais
-get_meses_com_valores_adicionais
-get_meses_sem_valores_adicionais
-get_qtd_mudancas_valores_adicionais
-get_valor_adicional_mes_ano
+def get_maior_ultimo(coluna: str, meses: int) -> dict: # retorna o maior dos últimos meses da coluna juntamente com seu mês e ano
 
+def get_total(coluna: str) -> dict: # retorna todos os elementos somados da coluna
 
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-11. Bonificações
+def get_total_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna o total da coluna dentro de um período mes/ano - mes/ano
 
+def get_total_ultimo(coluna: str, meses: int) -> dict: # retorna o total da coluna dentro do último período em meses
 
-get_total_bonificacoes
-get_evolucao_bonificacoes
-get_crescimento_percentual_bonificacoes
-get_meses_com_bonificacao
-get_meses_sem_bonificacao
-get_qtd_mudancas_bonificacoes
-get_bonificacao_mes_ano
+def get_evolucao(coluna: str) -> dict: # retorna a evolução mês a mês da coluna durante todo o período
 
+def get_evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna a evolução da coluna dentro de um certo período mes/ano - mes/ano
 
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-12. Total Vencimentos
+def get_mes_ano(coluna: str, mes: str, ano: int) -> dict: # retorna um elemento de uma coluna em determinado ano e mês
 
+def get_crescimento_percentual(coluna: str) -> dict: # retorna o crescimento percentual de toda a coluna do início ao fim
 
-get_total_vencimentos_acumulado
-get_evolucao_total_vencimentos
-get_crescimento_percentual_total_vencimentos
-get_meses_com_vencimento_acima
-get_qtd_mudancas_total_vencimentos
-get_total_vencimentos_mes_ano
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-13. INSS (%)
+def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna o crescimento percentual dentro de um período mes/ano - mes/ano
 
+def get_total_descontos() -> dict: # retorna a soma total de todos os descontos em todo o período
 
-get_evolucao_inss_percentual
-get_qtd_mudancas_inss_percentual
-get_inss_percentual_mes_ano
+def get_total_descontos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna a soma total de todos os descontos dentro de um período
 
+def get_liquido_total() -> dict: # retorna o total líquido recebido em todo o período
 
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-14. INSS (R$)
+def get_liquido_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna o total líquido recebido dentro de um período
 
+def get_liquido_percentual() -> dict: # retorna o crescimento percentual do valor líquido recebido durante todo o período
 
-get_total_inss_reais
-get_evolucao_inss_reais
-get_crescimento_percentual_inss_reais
-get_inss_reais_mes_ano
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-15. IRRF (%)
-
-
-get_evolucao_irrf_percentual
-get_qtd_mudancas_irrf_percentual
-get_irrf_percentual_mes_ano
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-16. IRRF (R$)
-
-
-get_total_irrf_reais
-get_evolucao_irrf_reais
-get_crescimento_percentual_irrf_reais
-get_irrf_reais_mes_ano
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-17. Plano de Saúde
-
-get_total_plano_saude
-get_evolucao_plano_saude
-get_crescimento_percentual_plano_saude
-get_plano_saude_mes_ano
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-18. Total Descontos
-
-
-get_total_descontos_acumulado
-get_evolucao_total_descontos
-get_crescimento_percentual_total_descontos
-get_total_descontos_mes_ano
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-19. Líquido a Receber
-
-
-get_total_liquido_recebido
-get_evolucao_salario_liquido
-get_crescimento_percentual_salario_liquido
-get_salario_liquido_mes_ano
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-20. Carga Horária
-
-
-get_evolucao_carga_horaria
-get_qtd_mudancas_carga_horaria
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-21. Horas Extras
-
-get_total_horas_extras
-get_evolucao_horas_extras
-get_meses_com_horas_extras
-get_qtd_mudancas_horas_extras
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-22. Base FGTS
-
-
-get_total_base_fgts
-get_evolucao_base_fgts
-get_crescimento_percentual_base_fgts
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-23. FGTS do Mês
-
-
-get_total_fgts_mes
-get_evolucao_fgts_mes
-get_crescimento_percentual_fgts_mes
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-24. Base INSS
-
-get_media_base_inss
-get_maior_base_inss
-get_menor_base_inss
-get_total_base_inss
-get_evolucao_base_inss
-get_crescimento_percentual_base_inss
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-25. Base IRRF
-
-
-get_total_base_irrf
-get_evolucao_base_irrf
-get_crescimento_percentual_base_irrf
-
-
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
----------------------------------------------------------------
-
-
-00. Generalistas
-
-//get_total
-//get_evolucao
-//get_mes_ano
-//get_crescimento_percentual
-//get_crescimento_percentual_periodo
+def get_liquido_percentual_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: # retorna o crescimento percentual do líquido dentro de um período

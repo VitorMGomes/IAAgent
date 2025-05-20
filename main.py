@@ -37,65 +37,224 @@ def consultar_documento_txt_ou_pdf(pergunta: str) -> dict:
     resposta = rag_chain.run(pergunta)
     return {"resposta": resposta}
 
-
-def get_SalarioBaseMedia():
-    media = round(df["Salário Base"].mean(), 2)
-    return {"media_salario_base": media}
-
-def get_informacoesCabecalho():
+def get_informacoesCabecalho() -> dict:
+    """Retorna o cabeçalho com os nomes das colunas presentes no CSV da folha de pagamento."""
     cabecalho = df.columns.tolist()
-    return {"informações_presentes": cabecalho}
+    return {"informacoes_presentes": cabecalho}
+
+
+def get_Media(coluna: str) -> dict:
+    """Retorna a média de todos os valores da coluna especificada."""
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+    media = round(df[coluna].mean(), 2)
+    return {f"media_{coluna}": media}
+
+
+def get_Media_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
+    """Retorna a média dos valores da coluna especificada dentro de um período entre mes/ano e mes/ano."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Ordena os dados para facilitar o filtro por período
+    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
+    periodo = dados_ordenados[
+        (dados_ordenados["Ano"] > ano_inicial) | 
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+    ]
+    periodo = periodo[
+        (periodo["Ano"] < ano_final) | 
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+    ]
+
+    if periodo.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
+
+    media = round(periodo[coluna].mean(), 2)
+    return {
+        f"media_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": media
+    }
+
+
+def get_Media_Ultimo(coluna: str, meses: int) -> dict:
+    """Retorna a média da coluna solicitada considerando os últimos N meses."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Ordena por ano e mês para garantir que os últimos meses fiquem no final
+    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
+    
+    # Seleciona os últimos N meses
+    ultimos_dados = dados_ordenados.tail(meses)
+
+    if ultimos_dados.empty:
+        return {"erro": "Não há dados suficientes para calcular a média dos últimos meses."}
+
+    media = round(ultimos_dados[coluna].mean(), 2)
+    return {
+        f"media_{coluna}_ultimos_{meses}_meses": media
+    }
+
 
 def get_Maior(coluna: str) -> dict:
-    maior = float(df[coluna].max())
-    return {"maior_comissao": maior}
+    """Retorna o maior valor da coluna especificada, juntamente com seu mês e ano."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    idx_maior = df[coluna].idxmax()
+    linha_maior = df.loc[idx_maior]
+
+    valor = round(linha_maior[coluna], 2)
+    mes = linha_maior["Mês"]
+    ano = linha_maior["Ano"]
+
+    return {
+        f"maior_{coluna}": valor,
+        "mes": mes,
+        "ano": ano
+    }
+
+
+def get_Maior_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
+    """Retorna o maior valor da coluna especificada dentro de um período, juntamente com seu mês e ano."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Ordena os dados por ano e mês para facilitar o filtro
+    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
+    
+    # Filtra o período desejado
+    periodo = dados_ordenados[
+        (dados_ordenados["Ano"] > ano_inicial) | 
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+    ]
+    periodo = periodo[
+        (periodo["Ano"] < ano_final) | 
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+    ]
+
+    if periodo.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
+
+    idx_maior = periodo[coluna].idxmax()
+    linha_maior = periodo.loc[idx_maior]
+
+    valor = round(linha_maior[coluna], 2)
+    mes = linha_maior["Mês"]
+    ano = linha_maior["Ano"]
+
+    return {
+        f"maior_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": valor,
+        "mes": mes,
+        "ano": ano
+    }
+
+
+def get_maior_ultimo(coluna: str, meses: int) -> dict:
+    """Retorna o maior valor da coluna nos últimos N meses, juntamente com seu mês e ano."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Ordena os dados por ano e mês
+    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
+
+    # Seleciona os últimos N meses
+    ultimos_dados = dados_ordenados.tail(meses)
+
+    if ultimos_dados.empty:
+        return {"erro": "Não há dados suficientes para os últimos meses especificados."}
+
+    idx_maior = ultimos_dados[coluna].idxmax()
+    linha_maior = ultimos_dados.loc[idx_maior]
+
+    valor = round(linha_maior[coluna], 2)
+    mes = linha_maior["Mês"]
+    ano = linha_maior["Ano"]
+
+    return {
+        f"maior_{coluna}_ultimos_{meses}_meses": valor,
+        "mes": mes,
+        "ano": ano
+    }
+
 
 def get_total(coluna: str) -> dict:
-    total = int(round(df[coluna].sum(), 2))
-    # print(total)
-    # print(coluna)
+    """Retorna a soma de todos os valores da coluna especificada."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    total = round(df[coluna].sum(), 2)
     return {f"total_{coluna}": total}
 
-def get_evolucao(coluna: str) -> dict:
+
+def get_total_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
+    """Retorna a soma dos valores da coluna especificada dentro de um período entre mes/ano e mes/ano."""
+
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Ordena os dados por ano e mês
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    historico = list(zip(
-        dados_ordenados["Mês"] + "-" + dados_ordenados["Ano"].astype(str),
-        dados_ordenados[coluna]
-    ))
-    return {f"evolucao_{coluna}": historico}
 
-def get_mes_ano(coluna: str, mes: str, ano: int) -> dict:
-    linha = df[(df["Mês"] == mes) & (df["Ano"] == ano)]
-    if linha.empty:
-        return {f"{coluna}_{mes}_{ano}": None}
-    valor = float(linha[coluna].values[0])
-    return {f"{coluna}_{mes}_{ano}": valor}
+    # Filtra o período desejado
+    periodo = dados_ordenados[
+        (dados_ordenados["Ano"] > ano_inicial) |
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+    ]
+    periodo = periodo[
+        (periodo["Ano"] < ano_final) |
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+    ]
 
-def get_crescimento_percentual(coluna: str) -> dict:
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    if len(dados_ordenados) < 2:
-        return {f"crescimento_percentual_{coluna}": 0.0}
-    inicial = dados_ordenados[coluna].iloc[0]
-    final = dados_ordenados[coluna].iloc[-1]
-    if inicial == 0:
-        return {f"crescimento_percentual_{coluna}": 0.0}
-    crescimento = ((final - inicial) / inicial) * 100
-    return {f"crescimento_percentual_{coluna}": round(crescimento, 2)}
+    if periodo.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
 
-def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    dados = df.copy()
-    dados_inicial = dados[(dados["Mês"] == mes_inicial) & (dados["Ano"] == ano_inicial)]
-    dados_final = dados[(dados["Mês"] == mes_final) & (dados["Ano"] == ano_final)]
-    if dados_inicial.empty or dados_final.empty:
-        return {"erro": "Período inicial ou final não encontrado nos dados."}
-    valor_inicial = dados_inicial[coluna].values[0]
-    valor_final = dados_final[coluna].values[0]
-    if valor_inicial == 0:
-        return {f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": 0.0}
-    crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
+    total = round(periodo[coluna].sum(), 2)
     return {
-        f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": round(crescimento, 2)
+        f"total_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": total
     }
+
+
+def get_total_ultimo(coluna: str, meses: int) -> dict: 
+    # retorna o total da coluna dentro do último período em meses
+
+def get_evolucao(coluna: str) -> dict: 
+    # retorna a evolução mês a mês da coluna durante todo o período
+
+def get_evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: 
+    # retorna a evolução da coluna dentro de um certo período mes/ano - mes/ano
+
+def get_mes_ano(coluna: str, mes: str, ano: int) -> dict: 
+    # retorna um elemento de uma coluna em determinado ano e mês
+
+def get_crescimento_percentual(coluna: str) -> dict: 
+    # retorna o crescimento percentual de toda a coluna do início ao fim
+
+def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: 
+    # retorna o crescimento percentual dentro de um período mes/ano - mes/ano
+
+def get_total_descontos() -> dict: 
+    # retorna a soma total de todos os descontos em todo o período
+
+def get_total_descontos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: 
+    # retorna a soma total de todos os descontos dentro de um período
+
+def get_liquido_total() -> dict: # retorna o total líquido recebido em todo o período
+
+def get_liquido_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: 
+    # retorna o total líquido recebido dentro de um período
+
+def get_liquido_percentual() -> dict: # retorna o crescimento percentual do valor líquido recebido durante todo o período
+
+def get_liquido_percentual_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict: 
+    # retorna o crescimento percentual do líquido dentro de um período
+
 
 
 # --------------------------------------------------------------
@@ -307,18 +466,22 @@ system_prompt = (
     "Nunca fale sobre dados de outros colaboradores ou sobre valores médios da empresa. "
     "Sempre responda com base apenas nos dados do colaborador atual.\n"
     f"{prompt_colunas}\n"
-    "Use as funções disponíveis quando necessário para calcular ou buscar as informações corretamente."
-    "Você pode consultar documentos PDF e textos técnicos (como explicações sobre FGTS, CBO etc) que foram carregados na base vetorial."
+    "Use as funções disponíveis quando necessário para calcular ou buscar as informações corretamente. "
+    "Você pode consultar documentos PDF e textos técnicos (como explicações sobre FGTS, PIS, IRRF, CBO etc) que foram carregados na base vetorial. "
+    "Se os documentos não forem suficientes, você pode complementar a resposta com seu conhecimento prévio confiável sobre leis trabalhistas, benefícios e temas relacionados à folha de pagamento no Brasil. "
+    "Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que possam ter mudado, a menos que estejam presentes nos documentos carregados. "
+    "Ao chamar funções, use exatamente os nomes das colunas listadas acima para garantir que a análise seja correta."
 )
+
 
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Qual foi o foi crescimento percentual do Salario Base do colaborador entre Janeiro de 2021 e Março de 2022?"},
+    {"role": "user", "content": "O que é o PIS?"},
 ]
 
 completion = client.chat.completions.create(
-    model="gpt-4.1-nano",
+    model="gpt-4o",
     messages=messages,
     tools=tools,
 )
@@ -388,7 +551,7 @@ class RespostaFinalMelhorada(BaseModel):
     response: str = Field(description="Uma resposta clara, corrigida e completa sobre o assunto.")
 
 completion_2 = client.beta.chat.completions.parse(
-    model="gpt-4.1-nano",
+    model="gpt-4o",
     messages=messages,
     response_format=RespostaFinalMelhorada
 )
