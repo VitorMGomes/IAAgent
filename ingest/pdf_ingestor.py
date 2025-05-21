@@ -27,7 +27,7 @@ splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 chunks = splitter.split_documents(all_docs)
 
 embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
-db = Chroma.from_documents(chunks, embeddings, persist_directory="./chrome_langchain_db")
+db = Chroma.from_documents(chunks, embeddings, persist_directory="/chrome_langchain_db")
 db.persist()
 
 print("Base vetorial unificada (TXT + PDF) criada com sucesso!")
