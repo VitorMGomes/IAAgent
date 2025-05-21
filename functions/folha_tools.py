@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 from dotenv import load_dotenv
@@ -9,6 +8,14 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 load_dotenv()
 
 df = pd.read_csv("data/Dados.csv")
+
+# Mapeia os meses para números logo após carregar o DataFrame
+mes_map = {
+    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+    "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+    "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+}
+df["Mês"] = df["Mês"].map(mes_map)
 
 retriever = Chroma(
     persist_directory="./chrome_langchain_db",
@@ -44,15 +51,28 @@ def get_Media_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena os dados para facilitar o filtro por período
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) | 
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) | 
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:
@@ -108,17 +128,30 @@ def get_Maior_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena os dados por ano e mês para facilitar o filtro
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
     
     # Filtra o período desejado
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) | 
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) | 
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:
@@ -180,17 +213,30 @@ def get_total_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena os dados por ano e mês
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
 
     # Filtra o período desejado
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:
@@ -244,17 +290,30 @@ def get_evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_fi
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena os dados por ano e mês
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
 
     # Filtra o período desejado
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:
@@ -262,7 +321,7 @@ def get_evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_fi
 
     # Cria lista com (Mês-Ano, valor da coluna)
     historico = list(zip(
-        periodo["Mês"] + "-" + periodo["Ano"].astype(str),
+        periodo["Mês"].astype(str) + "-" + periodo["Ano"].astype(str),
         periodo[coluna].round(2)
     ))
 
@@ -311,9 +370,22 @@ def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicia
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Filtra os dados para o mês/ano inicial e final
-    dados_inicial = df[(df["Mês"] == mes_inicial) & (df["Ano"] == ano_inicial)]
-    dados_final = df[(df["Mês"] == mes_final) & (df["Ano"] == ano_final)]
+    dados_inicial = df[(df["Mês"] == mes_inicial_num) & (df["Ano"] == ano_inicial)]
+    dados_final = df[(df["Mês"] == mes_final_num) & (df["Ano"] == ano_final)]
 
     if dados_inicial.empty or dados_final.empty:
         return {"erro": "Período inicial ou final não encontrado nos dados."}
@@ -322,7 +394,9 @@ def get_crescimento_percentual_periodo(coluna: str, mes_inicial: str, ano_inicia
     valor_final = dados_final[coluna].values[0]
 
     if valor_inicial == 0:
-        return {f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": 0.0}
+        return {
+            f"crescimento_percentual_{coluna}_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": 0.0
+        }
 
     crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
     return {
@@ -350,16 +424,29 @@ def get_total_descontos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: s
         if coluna not in df.columns:
             return {"erro": f"A coluna de desconto '{coluna}' não foi encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena e filtra o DataFrame no intervalo especificado
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
 
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:
@@ -368,97 +455,6 @@ def get_total_descontos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: s
     total = sum(periodo[coluna].sum() for coluna in colunas_desconto)
     return {
         f"total_descontos_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": round(total, 2)
-    }
-
-def get_liquido_total() -> dict:
-    """Retorna o total líquido recebido em todo o período."""
-
-    coluna_liquido = "Líquido a Receber"
-
-    if coluna_liquido not in df.columns:
-        return {"erro": f"A coluna '{coluna_liquido}' não foi encontrada na base de dados."}
-
-    total = round(df[coluna_liquido].sum(), 2)
-    return {"total_liquido_recebido": total}
-
-def get_liquido_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o total líquido recebido dentro de um período entre mes/ano e mes/ano."""
-
-    coluna_liquido = "Líquido a Receber"
-
-    if coluna_liquido not in df.columns:
-        return {"erro": f"A coluna '{coluna_liquido}' não foi encontrada na base de dados."}
-
-    # Ordena os dados cronologicamente
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    # Filtra o período especificado
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    total = round(periodo[coluna_liquido].sum(), 2)
-    return {
-        f"liquido_recebido_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": total
-    }
-
-def get_liquido_percentual() -> dict:
-    """Retorna o crescimento percentual do valor líquido recebido durante todo o período."""
-
-    coluna_liquido = "Líquido a Receber"
-
-    if coluna_liquido not in df.columns:
-        return {"erro": f"A coluna '{coluna_liquido}' não foi encontrada na base de dados."}
-
-    # Ordena os dados cronologicamente
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    if len(dados_ordenados) < 2:
-        return {"erro": "Não há dados suficientes para calcular o crescimento percentual."}
-
-    valor_inicial = dados_ordenados[coluna_liquido].iloc[0]
-    valor_final = dados_ordenados[coluna_liquido].iloc[-1]
-
-    if valor_inicial == 0:
-        return {"crescimento_percentual_liquido": 0.0}
-
-    crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
-    return {"crescimento_percentual_liquido": round(crescimento, 2)}
-
-def get_liquido_percentual_periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o crescimento percentual do valor líquido recebido dentro de um período entre mes/ano e mes/ano."""
-
-    coluna_liquido = "Líquido a Receber"
-
-    if coluna_liquido not in df.columns:
-        return {"erro": f"A coluna '{coluna_liquido}' não foi encontrada na base de dados."}
-
-    # Filtra os dados para o mês/ano inicial e final
-    dados_inicial = df[(df["Mês"] == mes_inicial) & (df["Ano"] == ano_inicial)]
-    dados_final = df[(df["Mês"] == mes_final) & (df["Ano"] == ano_final)]
-
-    if dados_inicial.empty or dados_final.empty:
-        return {"erro": "Período inicial ou final não encontrado nos dados."}
-
-    valor_inicial = dados_inicial[coluna_liquido].values[0]
-    valor_final = dados_final[coluna_liquido].values[0]
-
-    if valor_inicial == 0:
-        return {
-            f"crescimento_percentual_liquido_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": 0.0
-        }
-
-    crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
-    return {
-        f"crescimento_percentual_liquido_{mes_inicial}_{ano_inicial}_ate_{mes_final}_{ano_final}": round(crescimento, 2)
     }
 
 def get_Menor(coluna: str) -> dict:
@@ -486,17 +482,30 @@ def get_Menor_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
+    # Mapeamento dos meses para números
+    mes_map = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
+
+    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
+    mes_final_num = mes_map.get(mes_final.capitalize())
+
+    if mes_inicial_num is None or mes_final_num is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
     # Ordena os dados por ano e mês para facilitar o filtro
     dados_ordenados = df.sort_values(by=["Ano", "Mês"])
     
     # Filtra o período desejado
     periodo = dados_ordenados[
         (dados_ordenados["Ano"] > ano_inicial) | 
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial))
+        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
     ]
     periodo = periodo[
         (periodo["Ano"] < ano_final) | 
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final))
+        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
     ]
 
     if periodo.empty:

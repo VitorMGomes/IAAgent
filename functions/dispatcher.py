@@ -38,14 +38,6 @@ def call_function(name: str, args: dict):
         return get_total_descontos()
     elif name == "get_total_descontos_Periodo":
         return get_total_descontos_Periodo(**args)
-    elif name == "get_liquido_total":
-        return get_liquido_total()
-    elif name == "get_liquido_periodo":
-        return get_liquido_periodo(**args)
-    elif name == "get_liquido_percentual":
-        return get_liquido_percentual()
-    elif name == "get_liquido_percentual_periodo":
-        return get_liquido_percentual_periodo(**args)
     elif name == "get_Menor":
         return get_Menor(**args)
     elif name == "get_menor_ultimo":

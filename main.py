@@ -36,17 +36,17 @@ Se os documentos não forem suficientes, você pode complementar a resposta com 
 Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que possam ter mudado, a menos que estejam presentes nos documentos carregados.
 
 **Instruções de resposta:**
-- Se a pergunta do usuário for sobre um valor (como salário, comissão, desconto, FGTS, etc.), **responda apenas com o número e o mês/ano correspondente**. Não adicione explicações extras.
+- Se a resposta for valores em moeda,**responda em reais ou na notação da moeda**
 - Se a pergunta do usuário for conceitual (como “o que é FGTS?” ou “como funciona o IRRF?”), **responda de forma completa, clara e explicativa**, utilizando os documentos e seu conhecimento se necessário.
 """
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Qual o total de horas extras de janeiro de 2021 a dezembro 2022? E qual o maior salario base do colaborador em seu tempo de empresa?"}
+    {"role": "user", "content": "Me explique como funciona o desconto do imposto de renda? E quais as faixas de descontos para cada faixa salarial"}
 ]
 
 completion = client.chat.completions.create(
-    model="gpt-4o",
+    model="gpt-4.1-mini-2025-04-14",
     messages=messages,
     tools=tools,
 )
@@ -58,9 +58,22 @@ messages.append(assistant_message)
 if assistant_message.tool_calls:
     for tool_call in assistant_message.tool_calls:
         name = tool_call.function.name
-        args = json.loads(tool_call.function.arguments)
+        print("🛠️ Função a ser chamada:", name)
 
-        result = call_function(name, args)
+        try:
+            print("📦 Argumentos brutos (string):", tool_call.function.arguments)
+            args = json.loads(tool_call.function.arguments)
+            print("✅ Argumentos carregados (dict):", args)
+        except json.JSONDecodeError as e:
+            print("❌ Erro ao decodificar argumentos JSON:", e)
+            args = {}
+
+        try:
+            result = call_function(name, args)
+            print("🎯 Resultado da função:", result)
+        except Exception as e:
+            print("❌ Erro ao executar a função:", e)
+            result = {"erro": str(e)}
 
         messages.append({
             "role": "tool",
@@ -90,4 +103,11 @@ if assistant_message.tool_calls:
 
 else:
     # Caso não haja tool_call, imprime a resposta direta do modelo
-    print("Resposta final do agente:\n", assistant_message.content)
+    print("Resposta final do agente:\n\n\n", assistant_message.content)
+
+
+
+print("📊 Tokens usados:")
+print("Prompt tokens:", completion.usage.prompt_tokens)
+print("Completion tokens:", completion.usage.completion_tokens)
+print("Total tokens:", completion.usage.total_tokens)
