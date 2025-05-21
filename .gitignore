@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 .chrome_langchain_db/
+chrome_langchain_db/
