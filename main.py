@@ -42,7 +42,7 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Me explique como funciona o desconto do imposto de renda? E quais as faixas de descontos para cada faixa salarial"}
+    {"role": "user", "content": "Qual a relação do aumento percentual do salario liquido x aumento percentual do salario bruto no terceiro trimestre de 2022?"}
 ]
 
 completion = client.chat.completions.create(

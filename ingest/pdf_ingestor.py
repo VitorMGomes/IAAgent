@@ -1,6 +1,7 @@
 from langchain_community.document_loaders import DirectoryLoader, TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain_chroma import Chroma
+
 from langchain_openai import OpenAIEmbeddings
 import os
 from dotenv import load_dotenv
