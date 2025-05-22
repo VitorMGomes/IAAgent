@@ -70,7 +70,7 @@ while True:
     messages.append(assistant_message)
 
     # Imprime uso de tokens desta etapa
-    # print(f"\n📊 Tokens usados nesta etapa: {completion.usage.total_tokens} tokens")
+    print(f"\nTokens usados nesta etapa: {completion.usage.total_tokens} tokens")
 
     # Verifica se há funções a serem chamadas
     if assistant_message.tool_calls:
@@ -82,8 +82,8 @@ while True:
                 args = {}
 
             # Log de função chamada
-            print(f"\n🛠️ Função chamada: {name}")
-            print("📦 Argumentos:", args)
+            print(f"\nFunção chamada: {name}")
+            print("Argumentos:", args)
 
             try:
                 result = call_function(name, args)
@@ -97,7 +97,7 @@ while True:
                 "content": json.dumps(result, default=str)
             })
 
-        # Solicita revisão final com clareza
+        # Revisão final com clareza
         messages.append({
             "role": "user",
             "content": "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
@@ -107,7 +107,7 @@ while True:
             response: str = Field(description="Uma resposta clara e direta com os resultados solicitados.")
 
         completion_2 = client.beta.chat.completions.parse(
-            model="gpt-4o",
+            model="gpt-4.1-mini-2025-04-14",
             messages=messages,
             response_format=RespostaFinalMelhorada
         )
@@ -117,10 +117,10 @@ while True:
         # Adiciona resposta final ao histórico
         messages.append({"role": "assistant", "content": final_response.response})
 
-        # print("\n💬 Resposta final do agente:\n", final_response.response)
+        print("\n💬 Resposta final do agente:\n", final_response.response)
 
         # Imprime uso de tokens da segunda chamada
-        # print(f"\n📊 Tokens usados na resposta final: {completion_2.usage.total_tokens} tokens")
+        print(f"\nTokens usados na resposta final: {completion_2.usage.total_tokens} tokens")
 
     else:
         print("\n💬 Resposta final do agente:\n", assistant_message.content)
