@@ -5,24 +5,30 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from functions.tools import tools
 from functions.dispatcher import call_function
-from langchain_community.vectorstores import Chroma
+from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 import pandas as pd
 
+# Carrega variáveis de ambiente (.env)
 load_dotenv()
 
+# Inicializa cliente OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Carrega dados da folha de pagamento
 df = pd.read_csv("data/Dados.csv")
 
+# Inicializa a base vetorial com Chroma + embeddings
 retriever = Chroma(
     persist_directory="./.chrome_langchain_db",
     embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
 ).as_retriever()
 
+# Define colunas disponíveis no CSV
 cabecalho = df.columns.tolist()
-prompt_colunas = f"Essas são as colunas disponíveis na folha de pagamento: {', '.join(cabecalho)}."
 
+# System prompt: instruções fixas para o agente
 system_prompt = f"""
 Você é um agente inteligente que responde dúvidas sobre a folha de pagamento de um colaborador individual.
 Nunca fale sobre dados de outros colaboradores ou sobre valores médios da empresa.
@@ -36,78 +42,85 @@ Se os documentos não forem suficientes, você pode complementar a resposta com 
 Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que possam ter mudado, a menos que estejam presentes nos documentos carregados.
 
 **Instruções de resposta:**
-- Se a resposta for valores em moeda,**responda em reais ou na notação da moeda**
+- Se a resposta for valores em moeda, **responda em reais ou na notação da moeda**
 - Se a pergunta do usuário for conceitual (como “o que é FGTS?” ou “como funciona o IRRF?”), **responda de forma completa, clara e explicativa**, utilizando os documentos e seu conhecimento se necessário.
 """
 
-messages = [
-    {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Qual a relação do aumento percentual do salario liquido x aumento percentual do salario bruto no terceiro trimestre de 2022?"}
-]
+# Lista de mensagens com o system prompt inicial
+messages = [{"role": "system", "content": system_prompt}]
 
-completion = client.chat.completions.create(
-    model="gpt-4.1-mini-2025-04-14",
-    messages=messages,
-    tools=tools,
-)
+# Início do loop de conversa
+while True:
+    user_question = input("\nDigite sua pergunta sobre a folha de pagamento (ou 'sair' para encerrar): ")
+    if user_question.strip().lower() in {"sair", "exit", "quit"}:
+        print("Encerrando o assistente.")
+        break
 
-assistant_message = completion.choices[0].message
-messages.append(assistant_message)
+    # Adiciona a pergunta do usuário ao histórico
+    messages.append({"role": "user", "content": user_question})
 
-# Se houver chamadas de função, processa
-if assistant_message.tool_calls:
-    for tool_call in assistant_message.tool_calls:
-        name = tool_call.function.name
-        print("🛠️ Função a ser chamada:", name)
-
-        try:
-            print("📦 Argumentos brutos (string):", tool_call.function.arguments)
-            args = json.loads(tool_call.function.arguments)
-            print("✅ Argumentos carregados (dict):", args)
-        except json.JSONDecodeError as e:
-            print("❌ Erro ao decodificar argumentos JSON:", e)
-            args = {}
-
-        try:
-            result = call_function(name, args)
-            print("🎯 Resultado da função:", result)
-        except Exception as e:
-            print("❌ Erro ao executar a função:", e)
-            result = {"erro": str(e)}
-
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call.id,
-            "content": json.dumps(result, default=str)
-        })
-
-    # Mensagem de revisão final após uso de ferramentas
-    messages.append({
-        "role": "user",
-        "content": (
-            "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
-        )
-    })
-
-    class RespostaFinalMelhorada(BaseModel):
-        response: str = Field(description="Uma resposta clara e direta com os resultados solicitados.")
-
-    completion_2 = client.beta.chat.completions.parse(
-        model="gpt-4o",
+    # Chamada principal ao modelo com suporte a ferramentas
+    completion = client.chat.completions.create(
+        model="gpt-4.1-mini-2025-04-14",
         messages=messages,
-        response_format=RespostaFinalMelhorada
+        tools=tools,
     )
 
-    final_response = completion_2.choices[0].message.parsed
-    print("Resposta final do agente:\n", final_response.response)
+    assistant_message = completion.choices[0].message
+    messages.append(assistant_message)
 
-else:
-    # Caso não haja tool_call, imprime a resposta direta do modelo
-    print("Resposta final do agente:\n\n\n", assistant_message.content)
+    # Imprime uso de tokens desta etapa
+    # print(f"\n📊 Tokens usados nesta etapa: {completion.usage.total_tokens} tokens")
 
+    # Verifica se há funções a serem chamadas
+    if assistant_message.tool_calls:
+        for tool_call in assistant_message.tool_calls:
+            name = tool_call.function.name
+            try:
+                args = json.loads(tool_call.function.arguments)
+            except json.JSONDecodeError:
+                args = {}
 
+            # Log de função chamada
+            print(f"\n🛠️ Função chamada: {name}")
+            print("📦 Argumentos:", args)
 
-print("📊 Tokens usados:")
-print("Prompt tokens:", completion.usage.prompt_tokens)
-print("Completion tokens:", completion.usage.completion_tokens)
-print("Total tokens:", completion.usage.total_tokens)
+            try:
+                result = call_function(name, args)
+            except Exception as e:
+                result = {"erro": str(e)}
+
+            # Adiciona resposta da ferramenta ao histórico
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(result, default=str)
+            })
+
+        # Solicita revisão final com clareza
+        messages.append({
+            "role": "user",
+            "content": "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
+        })
+
+        class RespostaFinalMelhorada(BaseModel):
+            response: str = Field(description="Uma resposta clara e direta com os resultados solicitados.")
+
+        completion_2 = client.beta.chat.completions.parse(
+            model="gpt-4o",
+            messages=messages,
+            response_format=RespostaFinalMelhorada
+        )
+
+        final_response = completion_2.choices[0].message.parsed
+
+        # Adiciona resposta final ao histórico
+        messages.append({"role": "assistant", "content": final_response.response})
+
+        # print("\n💬 Resposta final do agente:\n", final_response.response)
+
+        # Imprime uso de tokens da segunda chamada
+        # print(f"\n📊 Tokens usados na resposta final: {completion_2.usage.total_tokens} tokens")
+
+    else:
+        print("\n💬 Resposta final do agente:\n", assistant_message.content)
