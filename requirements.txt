@@ -1,5 +1,12 @@
-openai
-python-dotenv
+fastapi
+uvicorn
 pandas
-streamlit
+python-dotenv
+openai
 pydantic
+langchain>=0.2.0
+langchain-openai
+langchain-chroma
+langchain-community
+tiktoken
+streamlit
