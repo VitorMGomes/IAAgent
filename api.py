@@ -89,3 +89,7 @@ def responder_pergunta(p: Pergunta):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/pergunta")
+def responder_pergunta_get(pergunta: str):
+    return responder_pergunta(Pergunta(pergunta=pergunta))
