@@ -330,17 +330,28 @@ def get_evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_fi
     }
 
 def get_mes_ano(coluna: str, mes: str, ano: int) -> dict:
-    """Retorna o valor da coluna especificada em um mês e ano determinados."""
-
+    """Retorna o valor da coluna em um mês e ano específicos."""
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
 
-    linha = df[(df["Mês"] == mes) & (df["Ano"] == ano)]
+    # Normaliza nome do mês
+    meses = {
+        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    }
 
-    if linha.empty:
-        return {"erro": f"Não há dados para {mes}/{ano}."}
+    mes_num = meses.get(mes)
+    if mes_num is None:
+        return {"erro": f"Mês '{mes}' inválido."}
 
-    valor = round(float(linha[coluna].values[0]), 2)
+    # Garante que o campo "Mês" do DataFrame esteja como número
+    dados_filtrados = df[(df["Mês"] == mes_num) & (df["Ano"] == ano)]
+
+    if dados_filtrados.empty:
+        return {"erro": f"Nenhum dado encontrado para {mes}/{ano}."}
+
+    valor = round(dados_filtrados[coluna].values[0], 2)
     return {f"{coluna}_{mes}_{ano}": valor}
 
 def get_crescimento_percentual(coluna: str) -> dict:

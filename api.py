@@ -34,17 +34,19 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 # Inicializa o app FastAPI
 app = FastAPI()
 
-# Modelo de entrada
-class Pergunta(BaseModel):
-    pergunta: str
+# Novo modelo para aceitar histórico completo
+class Historico(BaseModel):
+    messages: list[dict]
 
 @app.post("/pergunta")
-def responder_pergunta(p: Pergunta):
+def responder_pergunta(p: Historico):
     try:
-        messages = [{"role": "system", "content": system_prompt},
-                    {"role": "user", "content": p.pergunta}]
+        messages = p.messages
 
-        # Primeira chamada ao modelo com tools
+        # Adiciona o system prompt se ainda não estiver no histórico
+        if not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": system_prompt})
+
         completion = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
             messages=messages,
@@ -66,13 +68,11 @@ def responder_pergunta(p: Pergunta):
                     "content": json.dumps(result, default=str)
                 })
 
-            # Instrução de resposta refinada
             messages.append({
                 "role": "user",
                 "content": "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
             })
 
-            # Modelo Pydantic para resposta estruturada
             class RespostaFinalMelhorada(BaseModel):
                 response: str
 
@@ -88,8 +88,5 @@ def responder_pergunta(p: Pergunta):
             return {"resposta": assistant_message.content}
 
     except Exception as e:
+        print("Erro interno na API:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/pergunta")
-def responder_pergunta_get(pergunta: str):
-    return responder_pergunta(Pergunta(pergunta=pergunta))
