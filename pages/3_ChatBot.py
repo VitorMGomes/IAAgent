@@ -36,8 +36,33 @@ if pergunta:
     # Adiciona resposta do modelo ao histórico
     st.session_state.messages.append({"role": "assistant", "content": resposta})
 
-# Exibe todas as mensagens (ignora o system prompt na visualização)
+# Estilos customizados
+st.markdown("""
+    <style>
+    .user-msg {
+        text-align: right;
+        background-color: #2c2c2c;
+        padding: 0.75em 1em;
+        border-radius: 10px;
+        margin: 0.5em 0;
+        color: white;
+        margin-left: 20%;
+    }
+    .assistant-msg {
+        text-align: left;
+        background-color: #1a1a1a;
+        padding: 0.75em 1em;
+        border-radius: 10px;
+        margin: 0.5em 0;
+        color: white;
+        margin-right: 20%;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Exibe todas as mensagens (exceto o system prompt)
 for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    if msg["role"] == "user":
+        st.markdown(f'<div class="user-msg">{msg["content"]}</div>', unsafe_allow_html=True)
+    elif msg["role"] == "assistant":
+        st.markdown(f'<div class="assistant-msg">{msg["content"]}</div>', unsafe_allow_html=True)
