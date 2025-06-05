@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# Chama API que retorna JSON com os dados
+
 @st.cache_data
 def carregar_dados():
-    url = "http://localhost:8000/dados"  # ajuste se necessário
+    url = "http://localhost:8000/dados"
     response = requests.get(url)
     if response.status_code == 200:
         dados_json = response.json()
@@ -14,14 +14,11 @@ def carregar_dados():
         st.error("Erro ao carregar dados da API.")
         return pd.DataFrame()
 
-# Carrega os dados da API
 df = carregar_dados()
 
-# Garante que os dados existem
 if df.empty:
     st.stop()
 
-# Mapeia meses e cria data real
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
                "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 mes_to_num = {mes: i+1 for i, mes in enumerate(meses_ordem)}
@@ -29,7 +26,6 @@ df["Mês"] = pd.Categorical(df["Mês"], categories=meses_ordem, ordered=True)
 df["Data"] = pd.to_datetime(df["Ano"].astype(str) + "-" + df["Mês"].map(mes_to_num).astype(str) + "-01")
 df = df.sort_values("Data")
 
-# Título e filtro visual
 st.title("Visualização Personalizada da Folha")
 
 colunas_selecionadas = st.multiselect(
@@ -43,7 +39,6 @@ if colunas_selecionadas:
 else:
     st.warning("Selecione ao menos uma coluna para visualizar os dados.")
 
-# Gráfico
 st.subheader("📈 Evolução")
 
 coluna_numerica = st.selectbox(
