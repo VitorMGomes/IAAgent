@@ -7,13 +7,11 @@ from functions.tools import tools
 from functions.dispatcher import call_function
 import pandas as pd
 
-# Configurações iniciais
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 df = pd.read_csv("data/Dados.csv")
 cabecalho = df.columns.tolist()
 
-# Prompt fixo
 system_prompt = f"""
 Você é um agente inteligente que responde dúvidas sobre a folha de pagamento de um colaborador individual.
 Nunca fale sobre dados de outros colaboradores ou sobre valores médios da empresa.
@@ -31,7 +29,6 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 - Se a pergunta do usuário for conceitual (como “o que é FGTS?” ou “como funciona o IRRF?”), **responda de forma completa, clara e explicativa**, utilizando os documentos e seu conhecimento se necessário.
 """
 
-# Inicializa o app FastAPI
 app = FastAPI()
 
 @app.get("/dados")
@@ -39,7 +36,6 @@ def get_dados():
     df = pd.read_csv("data/Dados.csv")
     return df.to_dict(orient="records")
 
-# Novo modelo para aceitar histórico completo
 class Historico(BaseModel):
     messages: list[dict]
 
@@ -48,7 +44,6 @@ def responder_pergunta(p: Historico):
     try:
         messages = p.messages
 
-        # Adiciona o system prompt se ainda não estiver no histórico
         if not any(m["role"] == "system" for m in messages):
             messages.insert(0, {"role": "system", "content": system_prompt})
 
