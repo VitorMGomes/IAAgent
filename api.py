@@ -34,6 +34,11 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 # Inicializa o app FastAPI
 app = FastAPI()
 
+@app.get("/dados")
+def get_dados():
+    df = pd.read_csv("data/Dados.csv")
+    return df.to_dict(orient="records")
+
 # Novo modelo para aceitar histórico completo
 class Historico(BaseModel):
     messages: list[dict]
