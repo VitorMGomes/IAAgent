@@ -13,6 +13,9 @@ system_prompt = {
 if "messages" not in st.session_state:
     st.session_state.messages = [system_prompt]
 
+if "insights" not in st.session_state:
+    st.session_state.insights = []
+
 pergunta = st.chat_input("Digite sua pergunta")
 
 if pergunta:
@@ -27,7 +30,25 @@ if pergunta:
     except Exception as e:
         resposta = f"❌ Erro ao consultar a API: {str(e)}"
 
+    # Adiciona a resposta ao chat
     st.session_state.messages.append({"role": "assistant", "content": resposta})
+
+    # Salva insight, se aplicável
+    def processar_insight(pergunta, resposta):
+        if isinstance(resposta, dict) and "tipo" in resposta:
+            st.session_state.insights.append({
+                "pergunta": pergunta,
+                "tipo": resposta["tipo"],
+                "conteudo": resposta
+            })
+        elif isinstance(resposta, str):
+            st.session_state.insights.append({
+                "pergunta": pergunta,
+                "tipo": "texto",
+                "conteudo": resposta
+            })
+
+    processar_insight(pergunta, resposta)
 
 st.markdown("""
     <style>

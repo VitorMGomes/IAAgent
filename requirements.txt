@@ -10,3 +10,4 @@ langchain-chroma
 langchain-community
 tiktoken
 streamlit
+matplotlib

@@ -1,14 +1,15 @@
 import json
 import os
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from functions.tools import tools
 from functions.dispatcher import call_function
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 import pandas as pd
+from typing import Literal, List, Dict
 
 # Carrega variáveis de ambiente (.env)
 load_dotenv()
@@ -22,7 +23,7 @@ df = pd.read_csv("data/Dados.csv")
 # Inicializa a base vetorial com Chroma + embeddings
 retriever = Chroma(
     persist_directory="./.chrome_langchain_db",
-    embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+    embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY")),
 ).as_retriever()
 
 # Define colunas disponíveis no CSV
@@ -46,8 +47,19 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 - Se a pergunta do usuário for conceitual (como “o que é FGTS?” ou “como funciona o IRRF?”), **responda de forma completa, clara e explicativa**, utilizando os documentos e seu conhecimento se necessário.
 """
 
+# Modelo unificado para insights
+class Insight(BaseModel):
+    tipo: Literal["texto", "grafico_barras", "grafico_linha", "grafico_pizza"]
+    titulo: str
+    conteudo: str | None = None
+    dados: List[Dict[str, float]] | None = None
+    eixo_x: str | None = None
+    eixo_y: str | None = None
+    valor_total: float | None = None
+
 # Lista de mensagens com o system prompt inicial
 messages = [{"role": "system", "content": system_prompt}]
+insights_acumulados = []
 
 # Início do loop de conversa
 while True:
@@ -56,10 +68,8 @@ while True:
         print("Encerrando o assistente.")
         break
 
-    # Adiciona a pergunta do usuário ao histórico
     messages.append({"role": "user", "content": user_question})
 
-    # Chamada principal ao modelo com suporte a ferramentas
     completion = client.chat.completions.create(
         model="gpt-4.1-mini-2025-04-14",
         messages=messages,
@@ -69,10 +79,8 @@ while True:
     assistant_message = completion.choices[0].message
     messages.append(assistant_message)
 
-    # Imprime uso de tokens desta etapa
     print(f"\nTokens usados nesta etapa: {completion.usage.total_tokens} tokens")
 
-    # Verifica se há funções a serem chamadas
     if assistant_message.tool_calls:
         for tool_call in assistant_message.tool_calls:
             name = tool_call.function.name
@@ -81,7 +89,6 @@ while True:
             except json.JSONDecodeError:
                 args = {}
 
-            # Log de função chamada
             print(f"\nFunção chamada: {name}")
             print("Argumentos:", args)
 
@@ -90,37 +97,41 @@ while True:
             except Exception as e:
                 result = {"erro": str(e)}
 
-            # Adiciona resposta da ferramenta ao histórico
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "content": json.dumps(result, default=str)
             })
 
-        # Revisão final com clareza
         messages.append({
             "role": "user",
             "content": "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
         })
 
-        class RespostaFinalMelhorada(BaseModel):
-            response: str = Field(description="Uma resposta clara e direta com os resultados solicitados.")
+        # Geração paralela do insight estruturado
+        try:
+            completion_2 = client.beta.chat.completions.parse(
+                model="gpt-4o",
+                messages=messages,
+                response_format=Insight
+            )
+            insight = completion_2.choices[0].message.parsed
+            insights_acumulados.append(insight)
 
-        completion_2 = client.beta.chat.completions.parse(
+            print("\n📊 Insight estruturado gerado com sucesso!")
+            print(f"Tipo: {insight.tipo} | Título: {insight.titulo}")
+
+        except Exception as e:
+            print("⚠️ Falha ao gerar insight estruturado:", e)
+
+        # Geração da resposta textual para o chat
+        final_response = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
             messages=messages,
-            response_format=RespostaFinalMelhorada
         )
-
-        final_response = completion_2.choices[0].message.parsed
-
-        # Adiciona resposta final ao histórico
-        messages.append({"role": "assistant", "content": final_response.response})
-
-        print("\n💬 Resposta final do agente:\n", final_response.response)
-
-        # Imprime uso de tokens da segunda chamada
-        print(f"\nTokens usados na resposta final: {completion_2.usage.total_tokens} tokens")
+        resposta_final = final_response.choices[0].message.content
+        messages.append({"role": "assistant", "content": resposta_final})
+        print("\n💬 Resposta final do agente:\n", resposta_final)
 
     else:
         print("\n💬 Resposta final do agente:\n", assistant_message.content)
