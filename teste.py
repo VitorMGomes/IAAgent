@@ -1,21 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from openai import OpenAI
+from dotenv import load_dotenv
 import os, json
-import pandas as pd
-from typing import Literal, List, Dict, Optional
-
 from functions.tools import tools
 from functions.dispatcher import call_function
+import pandas as pd
 
-# Carrega .env e dados
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 df = pd.read_csv("data/Dados.csv")
 cabecalho = df.columns.tolist()
 
-# Prompt fixo com reforço sobre gráficos
 system_prompt = f"""
 Você é um agente inteligente que responde dúvidas sobre a folha de pagamento de um colaborador individual.
 Nunca fale sobre dados de outros colaboradores ou sobre valores médios da empresa.
@@ -30,26 +26,9 @@ Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que p
 
 **Instruções de resposta:**
 - Se a resposta for valores em moeda, **responda em reais ou na notação da moeda**
-- Nunca diga que irá gerar ou mostrar gráficos. Apenas responda à pergunta de forma clara e direta.
+- Se a pergunta do usuário for conceitual (como “o que é FGTS?” ou “como funciona o IRRF?”), **responda de forma completa, clara e explicativa**, utilizando os documentos e seu conhecimento se necessário.
 """
 
-# Histórico global de mensagens (simples)
-mensagens = [{"role": "system", "content": system_prompt}]
-
-# Modelos Pydantic
-class Pergunta(BaseModel):
-    user_message: str
-
-class Insight(BaseModel):
-    tipo: Literal["texto", "grafico_barras", "grafico_linha", "grafico_pizza"]
-    titulo: str
-    conteudo: Optional[str] = None
-    dados: Optional[List[Dict[str, float]]] = None
-    eixo_x: Optional[str] = None
-    eixo_y: Optional[str] = None
-    valor_total: Optional[float] = None
-
-# Inicializa API
 app = FastAPI()
 
 @app.get("/dados")
@@ -57,22 +36,25 @@ def get_dados():
     df = pd.read_csv("data/Dados.csv")
     return df.to_dict(orient="records")
 
-@app.post("/pergunta")
-def responder(p: Pergunta):
-    try:
-        mensagens.append({"role": "user", "content": p.user_message})
+class Historico(BaseModel):
+    messages: list[dict]
 
-        # Primeira chamada com ferramentas
+@app.post("/pergunta")
+def responder_pergunta(p: Historico):
+    try:
+        messages = p.messages
+
+        if not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": system_prompt})
+
         completion = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
-            messages=mensagens,
-            tools=tools,
+            messages=messages,
+            tools=tools
         )
 
         assistant_message = completion.choices[0].message
-        mensagens.append(assistant_message)
-
-        insight = None
+        messages.append(assistant_message)
 
         if assistant_message.tool_calls:
             for tool_call in assistant_message.tool_calls:
@@ -80,47 +62,31 @@ def responder(p: Pergunta):
                 args = json.loads(tool_call.function.arguments)
                 result = call_function(name, args)
 
-                mensagens.append({
+                messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": json.dumps(result, default=str)
                 })
 
-            # Segunda rodada: só resposta clara
-            mensagens.append({
+            messages.append({
                 "role": "user",
-                "content": "Responda agora com uma explicação clara e direta. Não mencione gráficos ou visualizações."
+                "content": "Responda de forma clara e direta. Evite explicações extras se a pergunta for objetiva."
             })
 
-            final = client.chat.completions.create(
+            class RespostaFinalMelhorada(BaseModel):
+                response: str
+
+            final = client.beta.chat.completions.parse(
                 model="gpt-4.1-mini-2025-04-14",
-                messages=mensagens,
+                messages=messages,
+                response_format=RespostaFinalMelhorada
             )
-            resposta = final.choices[0].message.content
-            mensagens.append({"role": "assistant", "content": resposta})
 
-            # Geração de insight estruturado (sem interferir no chat)
-            try:
-                mensagens.append({
-                    "role": "user",
-                    "content": "Agora gere apenas uma estrutura de dados visual com título, eixos e dados."
-                })
-                completion_insight = client.beta.chat.completions.parse(
-                    model="gpt-4o",
-                    messages=mensagens,
-                    response_format=Insight
-                )
-                insight = completion_insight.choices[0].message.parsed
-            except Exception as e:
-                print("⚠️ Falha ao gerar insight:", e)
-                insight = None
-
-            return {"resposta": resposta, "insight": insight}
+            return {"resposta": final.choices[0].message.parsed.response}
 
         else:
-            # Nenhuma ferramenta foi usada — responde direto
-            return {"resposta": assistant_message.content, "insight": None}
+            return {"resposta": assistant_message.content}
 
     except Exception as e:
-        print("❌ Erro interno:", e)
+        print("Erro interno na API:", e)
         raise HTTPException(status_code=500, detail=str(e))

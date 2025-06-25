@@ -3,53 +3,45 @@ import requests
 
 st.set_page_config(page_title="Chat Bot", page_icon="🤖")
 st.title("🤖 Chat Bot")
-st.write("Interaja com o chatbot aqui.")
+st.write("Converse com o agente. Os insights visuais aparecerão na aba 'Insights Personalizados'.")
 
+# Prompt inicial fixo
 system_prompt = {
     "role": "system",
     "content": "Você é um agente inteligente que responde dúvidas sobre a folha de pagamento de um colaborador individual."
 }
 
+# Inicializa sessões
 if "messages" not in st.session_state:
     st.session_state.messages = [system_prompt]
-
 if "insights" not in st.session_state:
     st.session_state.insights = []
 
+# Entrada do usuário
 pergunta = st.chat_input("Digite sua pergunta")
 
 if pergunta:
     st.session_state.messages.append({"role": "user", "content": pergunta})
-    try:
-        resposta_api = requests.post(
-            "http://localhost:8000/pergunta",
-            json={"messages": st.session_state.messages}
-        )
-        resposta_json = resposta_api.json()
-        resposta = resposta_json.get("resposta", f"⚠️ Erro na resposta: {resposta_json}")
-    except Exception as e:
-        resposta = f"❌ Erro ao consultar a API: {str(e)}"
 
-    # Adiciona a resposta ao chat
+    with st.spinner("Consultando o agente..."):
+        try:
+            resposta_api = requests.post(
+                "http://127.0.0.1:8000/pergunta",  # ✅ Corrigido para o modelo da API
+                json={"user_message": pergunta}
+            )
+            resposta_json = resposta_api.json()
+            resposta = resposta_json.get("resposta", "⚠️ Erro: resposta ausente.")
+            insight = resposta_json.get("insight")
+        except Exception as e:
+            resposta = f"❌ Erro ao consultar a API: {str(e)}"
+            insight = None
+
     st.session_state.messages.append({"role": "assistant", "content": resposta})
 
-    # Salva insight, se aplicável
-    def processar_insight(pergunta, resposta):
-        if isinstance(resposta, dict) and "tipo" in resposta:
-            st.session_state.insights.append({
-                "pergunta": pergunta,
-                "tipo": resposta["tipo"],
-                "conteudo": resposta
-            })
-        elif isinstance(resposta, str):
-            st.session_state.insights.append({
-                "pergunta": pergunta,
-                "tipo": "texto",
-                "conteudo": resposta
-            })
+    if insight and isinstance(insight, dict):
+        st.session_state.insights.append(insight)
 
-    processar_insight(pergunta, resposta)
-
+# Estilos de exibição
 st.markdown("""
     <style>
     .msg {
@@ -60,23 +52,12 @@ st.markdown("""
         line-height: 1.5;
         max-width: 80%;
     }
-    .user-msg {
-        text-align: right;
-        background-color: #3c3c3c;
-        color: white;
-        margin-left: auto;
-        margin-right: 0;
-    }
-    .assistant-msg {
-        text-align: left;
-        background-color: #222;
-        color: white;
-        margin-right: auto;
-        margin-left: 0;
-    }
+    .user-msg { text-align: right; background-color: #3c3c3c; color: white; margin-left: auto; }
+    .assistant-msg { text-align: left; background-color: #222; color: white; margin-right: auto; }
     </style>
 """, unsafe_allow_html=True)
 
+# Renderiza o histórico do chat
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.markdown(f'<div class="msg user-msg">👤 {msg["content"]}</div>', unsafe_allow_html=True)

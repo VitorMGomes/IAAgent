@@ -5,7 +5,7 @@ import requests
 
 @st.cache_data
 def carregar_dados():
-    url = "http://localhost:8000/dados"
+    url = "http://127.0.0.1:8000/dados"
     response = requests.get(url)
     if response.status_code == 200:
         dados_json = response.json()
