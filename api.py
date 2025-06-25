@@ -1,126 +1,100 @@
+# api.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from dotenv import load_dotenv
-from openai import OpenAI
-import os, json
-import pandas as pd
 from typing import Literal, List, Dict, Optional
+import os, json, pandas as pd
+from openai import OpenAI
+from dotenv import load_dotenv
 
-from functions.tools import tools
+from functions.tools import tools       # seu dispatcher de ferramentas
 from functions.dispatcher import call_function
 
-# Carrega .env e dados
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 df = pd.read_csv("data/Dados.csv")
 cabecalho = df.columns.tolist()
 
-# Prompt fixo com reforço sobre gráficos
 system_prompt = f"""
 Você é um agente inteligente que responde dúvidas sobre a folha de pagamento de um colaborador individual.
 Nunca fale sobre dados de outros colaboradores ou sobre valores médios da empresa.
 Sempre responda com base apenas nos dados do colaborador atual.
 
-Essas são as colunas disponíveis na folha de pagamento: {', '.join(cabecalho)}.
-Ao usar funções que exigem o nome de uma coluna, use **exatamente** os nomes listados acima. Não traduza nem reescreva os nomes das colunas.
+Colunas disponíveis: {', '.join(cabecalho)}.
+Use **exatamente** esses nomes ao chamar funções.
 
-Você pode consultar documentos PDF e textos técnicos (como explicações sobre FGTS, PIS, IRRF, CBO etc) que foram carregados na base vetorial.
-Se os documentos não forem suficientes, você pode complementar a resposta com seu conhecimento prévio confiável sobre leis trabalhistas, benefícios e temas relacionados à folha de pagamento no Brasil.
-Evite mencionar valores fixos de impostos, percentuais ou faixas salariais que possam ter mudado, a menos que estejam presentes nos documentos carregados.
-
-**Instruções de resposta:**
-- Se a resposta for valores em moeda, **responda em reais ou na notação da moeda**
-- Nunca diga que irá gerar ou mostrar gráficos. Apenas responda à pergunta de forma clara e direta.
+Não mencione gráficos ou visualizações. Apenas responda objetivamente.
 """
 
-# Histórico global de mensagens (simples)
-mensagens = [{"role": "system", "content": system_prompt}]
+mensagens: List[Dict] = [{"role": "system", "content": system_prompt}]
 
-# Modelos Pydantic
 class Pergunta(BaseModel):
     user_message: str
 
 class Insight(BaseModel):
-    tipo: Literal["texto", "grafico_barras", "grafico_linha", "grafico_pizza"]
+    tipo: Literal["texto","grafico_barras","grafico_linha","grafico_pizza"]
     titulo: str
     conteudo: Optional[str] = None
-    dados: Optional[List[Dict[str, float]]] = None
-    eixo_x: Optional[str] = None
-    eixo_y: Optional[str] = None
+    dados:     Optional[List[Dict[str,float]]] = None
+    eixo_x:    Optional[str] = None
+    eixo_y:    Optional[str] = None
     valor_total: Optional[float] = None
 
-# Inicializa API
 app = FastAPI()
 
-@app.get("/dados")
-def get_dados():
-    df = pd.read_csv("data/Dados.csv")
-    return df.to_dict(orient="records")
-
 @app.post("/pergunta")
-def responder(p: Pergunta):
+def pergunta(p: Pergunta):
     try:
-        mensagens.append({"role": "user", "content": p.user_message})
-
-        # Primeira chamada com ferramentas
-        completion = client.chat.completions.create(
+        mensagens.append({"role":"user","content":p.user_message})
+        # 1ª rodada: LLM + ferramentas
+        comp = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
             messages=mensagens,
-            tools=tools,
+            tools=tools
         )
+        asm = comp.choices[0].message
+        mensagens.append(asm)
 
-        assistant_message = completion.choices[0].message
-        mensagens.append(assistant_message)
+        if not asm.tool_calls:
+            # sem ferramenta → só retorna texto
+            return {"resposta": asm.content, "insight": None}
 
-        insight = None
-
-        if assistant_message.tool_calls:
-            for tool_call in assistant_message.tool_calls:
-                name = tool_call.function.name
-                args = json.loads(tool_call.function.arguments)
-                result = call_function(name, args)
-
-                mensagens.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result, default=str)
-                })
-
-            # Segunda rodada: só resposta clara
+        # executa tool calls
+        for tc in asm.tool_calls:
+            res = call_function(tc.function.name, json.loads(tc.function.arguments))
             mensagens.append({
-                "role": "user",
-                "content": "Responda agora com uma explicação clara e direta. Não mencione gráficos ou visualizações."
+                "role":"tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps(res, default=str)
             })
 
-            final = client.chat.completions.create(
-                model="gpt-4.1-mini-2025-04-14",
+        # 2ª rodada: resposta clara
+        mensagens.append({
+            "role":"user",
+            "content":"Responda de forma clara e direta. Não mencione gráficos."
+        })
+        final = client.chat.completions.create(
+            model="gpt-4.1-mini-2025-04-14",
+            messages=mensagens
+        )
+        resposta = final.choices[0].message.content
+        mensagens.append({"role":"assistant","content":resposta})
+
+        # 3ª rodada: gere o insight JSON STANDALONE
+        try:
+            mensagens.append({
+                "role":"user",
+                "content":"Agora gere apenas um objeto JSON para visualização, com tipo, título, eixos e dados."
+            })
+            comp_ins = client.beta.chat.completions.parse(
+                model="gpt-4o",
                 messages=mensagens,
+                response_format=Insight
             )
-            resposta = final.choices[0].message.content
-            mensagens.append({"role": "assistant", "content": resposta})
+            insight = comp_ins.choices[0].message.parsed
+        except Exception:
+            insight = None
 
-            # Geração de insight estruturado (sem interferir no chat)
-            try:
-                mensagens.append({
-                    "role": "user",
-                    "content": "Agora gere apenas uma estrutura de dados visual com título, eixos e dados."
-                })
-                completion_insight = client.beta.chat.completions.parse(
-                    model="gpt-4o",
-                    messages=mensagens,
-                    response_format=Insight
-                )
-                insight = completion_insight.choices[0].message.parsed
-            except Exception as e:
-                print("⚠️ Falha ao gerar insight:", e)
-                insight = None
-
-            return {"resposta": resposta, "insight": insight}
-
-        else:
-            # Nenhuma ferramenta foi usada — responde direto
-            return {"resposta": assistant_message.content, "insight": None}
+        return {"resposta": resposta, "insight": insight}
 
     except Exception as e:
-        print("❌ Erro interno:", e)
         raise HTTPException(status_code=500, detail=str(e))
