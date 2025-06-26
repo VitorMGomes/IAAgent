@@ -1,116 +1,53 @@
+# 2_Insights_Personalizados.py
 import streamlit as st
-import pandas as pd
-import altair as alt
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Insights Personalizados", page_icon="📈")
 st.title("📊 Insights Personalizados")
-st.write("Aqui você verá os gráficos e análises gerados automaticamente enquanto conversa com o agente.")
+st.write("Aqui você verá os gráficos gerados automaticamente na conversa com o agente.")
 
-# Se não houver insights
+# --- função local ---
+def plot_insight(insight: dict):
+    tipo = insight["tipo"]
+    titulo = insight["titulo"]
+    eixo_x = insight["eixo_x"]
+    eixo_y = insight["eixo_y"]
+    dados = insight["dados"]
+
+    plt.figure(figsize=(8, 4))
+    if tipo == "linha":
+        plt.plot(eixo_x, dados, marker="o")
+        plt.ylabel(eixo_y)
+    elif tipo == "barra":
+        plt.bar(eixo_x, dados)
+        plt.ylabel(eixo_y)
+    elif tipo == "pizza":
+        labels = [item["label"] for item in dados]
+        vals   = [item["value"] for item in dados]
+        plt.pie(vals, labels=labels, autopct="%1.1f%%")
+    plt.title(titulo)
+    if tipo != "pizza":
+        plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+# --- verifica se há insights ---
 if "insights" not in st.session_state or not st.session_state.insights:
-    st.info("Nenhum insight foi gerado ainda. Volte ao chatbot e faça uma pergunta.")
+    st.info("Nenhum insight disponível. Volte ao chatbot e faça perguntas.")
     st.stop()
 
-# Itera por cada insight acumulado
-for idx, insight in enumerate(st.session_state.insights, start=1):
-    st.markdown(f"### {idx}. {insight.get('titulo', '')}")
-
-    # JSON bruto para depuração
-    with st.expander("🔍 Ver dados brutos do insight", expanded=False):
-        st.json(insight)
-
-    tipo = insight.get("tipo")
-    raw_data = insight.get("dados") or []
-    eixo_x = insight.get("eixo_x", "x")
-    eixo_y = insight.get("eixo_y", "y")
-    records = []
-
-    # Parseamento flexível de dados
-    if isinstance(raw_data, list):
-        for item in raw_data:
-            if isinstance(item, dict):
-                # Caso o dict já contenha as chaves de eixo_x e eixo_y
-                if eixo_x in item and eixo_y in item:
-                    x_val = item.get(eixo_x)
-                    y_val = item.get(eixo_y)
-                    records.append({eixo_x: x_val, eixo_y: y_val})
-                else:
-                    # Caso seja dict {x_val: y_val}
-                    for x_val, y_val in item.items():
-                        records.append({eixo_x: x_val, eixo_y: y_val})
-    else:
-        st.warning("Formato de dados inesperado (esperado lista), não será possível gerar o gráfico.")
-
-    # Se não há registros, avisa e segue
-    if not records:
-        st.warning("Dados insuficientes para gerar o gráfico.")
-        st.markdown("---")
-        continue
-
-    # Cria DataFrame
-    df_plot = pd.DataFrame(records)
-
-    # Determina ordem de categorias para eixo_x, se nominal
-    categories = []
-    if eixo_x in df_plot.columns:
-        seen = set()
-        for v in df_plot[eixo_x].tolist():
-            if v not in seen:
-                seen.add(v)
-                categories.append(v)
-
-    with st.expander("📋 Tabela de dados utilizada", expanded=False):
-        st.dataframe(df_plot)
-
-    # Configuração de scale/ordenamento para o eixo X
-    sort_param = categories if categories else None
-    x_encoding = alt.X(eixo_x, type='nominal', sort=sort_param)
-    y_encoding = alt.Y(eixo_y)
-
-    # Geração do gráfico
-    if tipo == "grafico_barras":
-        chart = (
-            alt.Chart(df_plot)
-               .mark_bar()
-               .encode(
-                   x=x_encoding,
-                   y=y_encoding
-               )
-               .properties(title=insight.get('titulo', ''))
-        )
-    elif tipo == "grafico_linha":
-        chart = (
-            alt.Chart(df_plot)
-               .mark_line(point=True)
-               .encode(
-                   x=x_encoding,
-                   y=y_encoding
-               )
-               .properties(title=insight.get('titulo', ''))
-        )
-    elif tipo == "grafico_pizza":
-        chart = (
-            alt.Chart(df_plot)
-               .mark_arc()
-               .encode(
-                   theta=alt.Theta(eixo_y),
-                   color=alt.Color(eixo_x)
-               )
-               .properties(title=insight.get('titulo', ''))
-        )
-    else:
-        st.warning(f"Tipo de insight não suportado: {tipo}")
-        st.markdown("---")
-        continue
-
-    st.altair_chart(chart, use_container_width=True)
-
-    # Métrica de valor total, se existir
-    if insight.get("valor_total") is not None:
+# --- itera sobre cada entrada de insight armazenada ---
+for idx, wrapper in enumerate(st.session_state.insights, start=1):
+    # wrapper = {"insights": [ {...}, {...} ]}
+    insights = wrapper.get("insights", [])
+    
+    for insight in insights:
+        st.markdown(f"### {idx}. {insight.get('titulo', '')}")
+        with st.expander("🔍 Dados brutos"):
+            st.json(insight)
         try:
-            total = float(insight.get("valor_total"))
-            st.metric("Valor Total", f"R$ {total:,.2f}")
-        except Exception:
-            st.metric("Valor Total", str(insight.get("valor_total")))
-
-    st.markdown("---")
+            plot_insight(insight)
+        except Exception as e:
+            st.error(f"Erro ao gerar gráfico: {e}")
+        st.markdown("---")

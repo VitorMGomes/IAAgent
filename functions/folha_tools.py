@@ -5,11 +5,11 @@ from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 
+# Carrega variáveis de ambiente e dados
 load_dotenv()
-
 df = pd.read_csv("data/Dados.csv")
 
-# Mapeia os meses para números logo após carregar o DataFrame
+# Normaliza meses para números
 mes_map = {
     "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
     "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
@@ -17,339 +17,266 @@ mes_map = {
 }
 df["Mês"] = df["Mês"].map(mes_map)
 
+# Configuração do RAG
 retriever = Chroma(
     persist_directory="./chrome_langchain_db",
     embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
 ).as_retriever()
-
 rag_chain = RetrievalQA.from_chain_type(
     llm=ChatOpenAI(openai_api_key=os.getenv("OPENAI_API_KEY"), temperature=0),
     retriever=retriever,
     return_source_documents=False
 )
 
+# ---------- SCHEMAS e DECORATOR PARA INSIGHTS ----------
+from pydantic import BaseModel
+from typing import List, Literal, Any, Dict
+
+class InsightSchema(BaseModel):
+    tipo: Literal["linha", "barra", "pizza"]
+    titulo: str
+    eixo_x: List[str]
+    eixo_y: str
+    dados: List[Any]
+
+class BatchInsights(BaseModel):
+    insights: List[InsightSchema]
+
+
+def normalize_insights(func):
+    def wrapper(*args, **kwargs):
+        raw = func(*args, **kwargs)
+        if isinstance(raw, dict) and raw.get("erro"):
+            return raw
+        if isinstance(raw, dict) and "insights" not in raw:
+            raw = {"insights": [raw]}
+        batch = BatchInsights(**raw)
+        return batch.dict()
+    return wrapper
+
+# ---------- FUNÇÕES DE CONSULTA E INSIGHTS ----------
 
 def consultar_documento_txt_ou_pdf(pergunta: str) -> dict:
     resposta = rag_chain.run(pergunta)
     return {"resposta": resposta}
 
+@normalize_insights
 def get_informacoesCabecalho() -> dict:
-    """Retorna o cabeçalho com os nomes das colunas presentes no CSV da folha de pagamento."""
-    cabecalho = df.columns.tolist()
-    return {"informacoes_presentes": cabecalho}
+    cols = df.columns.tolist()
+    return {
+        "tipo": "pizza",
+        "titulo": "Colunas Disponíveis",
+        "eixo_x": [],
+        "eixo_y": "",
+        "dados": [{"label": c, "value": 0} for c in cols]
+    }
 
+@normalize_insights
 def get_Media(coluna: str) -> dict:
-    """Retorna a média da coluna especificada, junto com todos os valores individuais."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
     valores = df[coluna].dropna().round(2)
-
-    media = round(valores.mean(), 2)
-
-    dados = [
-        {str(i + 1): valor} for i, valor in enumerate(valores)
-    ]
-
+    meses = [str(i+1) for i in range(len(valores))]
     return {
-        "media": media,
-        "dados": dados
+        "tipo": "linha",
+        "titulo": f"Média de {coluna}",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": [float(v) for v in valores]
     }
 
+@normalize_insights
 def get_Media_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna a média dos valores da coluna especificada dentro de um período entre mes/ano e mes/ano,
-    junto com os valores mensais individuais para visualização."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    valores_mensais = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            periodo["Mês"].astype(str),
-            periodo["Ano"].astype(str),
-            periodo[coluna]
-        )
-    ]
-
-    media = round(sum(list(d.values())[0] for d in valores_mensais) / len(valores_mensais), 2)
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    mi, mf = mes_map.get(mes_inicial.capitalize()), mes_map.get(mes_final.capitalize())
+    if not mi or not mf:
+        return {"erro": "Mês inválido."}
+    dfp = df.sort_values(["Ano","Mês"])
+    mask = ((dfp["Ano"]>ano_inicial) | ((dfp["Ano"]==ano_inicial)&(dfp["Mês"]>=mi))) & \
+           ((dfp["Ano"]<ano_final)  | ((dfp["Ano"]==ano_final)  &(dfp["Mês"]<=mf)))
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Sem dados no período."}
+    meses = [f"{m}/{a}" for m,a in zip(sel["Mês"], sel["Ano"])]
+    vals = [round(v,2) for v in sel[coluna]]
+    media = round(sum(vals)/len(vals),2)
     return {
-        "media": media,
-        "dados": valores_mensais
+        "tipo": "linha",
+        "titulo": f"Média de {coluna} ({mes_inicial}/{ano_inicial}-{mes_final}/{ano_final})",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
+@normalize_insights
 def get_Media_Ultimo(coluna: str, meses: int) -> dict:
-    """Retorna a média da coluna solicitada considerando os últimos N meses,
-    junto com os valores mensais individuais."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    ultimos_dados = dados_ordenados.tail(meses)
-
-    if ultimos_dados.empty:
-        return {"erro": "Não há dados suficientes para calcular a média dos últimos meses."}
-
-    valores_mensais = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            ultimos_dados["Mês"].astype(str),
-            ultimos_dados["Ano"].astype(str),
-            ultimos_dados[coluna]
-        )
-    ]
-
-    media = round(sum(list(d.values())[0] for d in valores_mensais) / len(valores_mensais), 2)
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    sel = df.sort_values(["Ano","Mês"]).tail(meses)
+    if sel.empty:
+        return {"erro": "Sem dados suficientes."}
+    meses_l = [f"{m}/{a}" for m,a in zip(sel["Mês"], sel["Ano"])]
+    vals = [round(v,2) for v in sel[coluna]]
     return {
-        "media": media,
-        "dados": valores_mensais
+        "tipo": "linha",
+        "titulo": f"Média últimos {meses} meses de {coluna}",
+        "eixo_x": meses_l,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
+@normalize_insights
 def get_Maior(coluna: str) -> dict:
-    """Retorna o maior valor da coluna especificada, seu mês/ano, e os dados completos da coluna."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    idx_maior = df[coluna].idxmax()
-    linha_maior = df.loc[idx_maior]
-
-    valor = round(linha_maior[coluna], 2)
-    mes = str(linha_maior["Mês"])
-    ano = str(linha_maior["Ano"])
-
-    dados = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            df["Mês"].astype(str),
-            df["Ano"].astype(str),
-            df[coluna]
-        )
-    ]
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    sel = df.sort_values(["Ano","Mês"])
+    idx = sel[coluna].idxmax(); lin = sel.loc[idx]
+    meses_l = [f"{m}/{a}" for m,a in zip(sel["Mês"], sel["Ano"])]
+    vals = [round(v,2) for v in sel[coluna]]
+    titulo = f"Maior {coluna}: {round(lin[coluna],2)} em {int(lin['Mês'])}/{int(lin['Ano'])}"
     return {
-        "maior_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": dados
+        "tipo": "linha",
+        "titulo": titulo,
+        "eixo_x": meses_l,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
+@normalize_insights
 def get_Maior_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o maior valor da coluna especificada dentro de um período, junto com seu mês/ano e os valores do período."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    idx_maior = periodo[coluna].idxmax()
-    linha_maior = periodo.loc[idx_maior]
-
-    valor = round(linha_maior[coluna], 2)
-    mes = str(linha_maior["Mês"])
-    ano = str(linha_maior["Ano"])
-
-    valores_mensais = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            periodo["Mês"].astype(str),
-            periodo["Ano"].astype(str),
-            periodo[coluna]
-        )
-    ]
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    mi, mf = mes_map.get(mes_inicial.capitalize()), mes_map.get(mes_final.capitalize())
+    if not mi or not mf:
+        return {"erro": "Mês inválido."}
+    dfp = df.sort_values(["Ano","Mês"])
+    mask = ((dfp["Ano"]>ano_inicial) | ((dfp["Ano"]==ano_inicial)&(dfp["Mês"]>=mi))) & \
+           ((dfp["Ano"]<ano_final)  | ((dfp["Ano"]==ano_final)  &(dfp["Mês"]<=mf)))
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Sem dados no período."}
+    idx = sel[coluna].idxmax(); lin = sel.loc[idx]
+    meses_l = [f"{m}/{a}" for m,a in zip(sel["Mês"], sel["Ano"])]
+    vals = [round(v,2) for v in sel[coluna]]
+    titulo = f"Maior {coluna} no período: {round(lin[coluna],2)} em {int(lin['Mês'])}/{int(lin['Ano'])}"
     return {
-        "maior_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": valores_mensais
+        "tipo": "linha",
+        "titulo": titulo,
+        "eixo_x": meses_l,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
+@normalize_insights
 def get_Maior_Ultimo(coluna: str, meses: int) -> dict:
-    """Retorna o maior valor da coluna nos últimos N meses, com mês/ano e todos os valores individuais."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    ultimos_dados = dados_ordenados.tail(meses)
-
-    if ultimos_dados.empty:
-        return {"erro": "Não há dados suficientes para os últimos meses especificados."}
-
-    idx_maior = ultimos_dados[coluna].idxmax()
-    linha_maior = ultimos_dados.loc[idx_maior]
-
-    valor = round(linha_maior[coluna], 2)
-    mes = str(linha_maior["Mês"])
-    ano = str(linha_maior["Ano"])
-
-    dados = [
-        {f"{m}/{a}": round(v, 2)}
-        for m, a, v in zip(
-            ultimos_dados["Mês"].astype(str),
-            ultimos_dados["Ano"].astype(str),
-            ultimos_dados[coluna]
-        )
-    ]
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    sel = df.sort_values(["Ano","Mês"]).tail(meses)
+    if sel.empty:
+        return {"erro": "Sem dados suficientes."}
+    idx = sel[coluna].idxmax(); lin = sel.loc[idx]
+    meses_l = [f"{m}/{a}" for m,a in zip(sel["Mês"], sel["Ano"])]
+    vals = [round(v,2) for v in sel[coluna]]
+    titulo = f"Maior {coluna} últimos {meses} meses: {round(lin[coluna],2)} em {int(lin['Mês'])}/{int(lin['Ano'])}"
     return {
-        "maior_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": dados
+        "tipo": "linha",
+        "titulo": titulo,
+        "eixo_x": meses_l,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
+@normalize_insights
 def get_Total(coluna: str) -> dict:
-    """Retorna a soma de todos os valores da coluna especificada e os valores individuais por mês/ano."""
-
     if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    total = round(df[coluna].sum(), 2)
-
-    dados = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            df["Mês"].astype(str),
-            df["Ano"].astype(str),
-            df[coluna]
-        )
-    ]
-
+        return {"erro": f"Coluna '{coluna}' não encontrada."}
+    meses_l = [f"{m}/{a}" for m,a in zip(df["Mês"], df["Ano"])]
+    vals = [round(v,2) for v in df[coluna]]
+    total = round(sum(vals),2)
     return {
-        "valor_total": total,
-        "dados": dados
+        "tipo": "barra",
+        "titulo": f"Total {coluna}: {total}",
+        "eixo_x": meses_l,
+        "eixo_y": coluna,
+        "dados": vals
     }
 
-def get_Total_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna os valores mensais e total acumulado da coluna especificada entre mes/ano e mes/ano."""
-
+@normalize_insights
+def get_Total_Periodo(
+    coluna: str,
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna os valores mensais e o total acumulado da coluna especificada
+    entre mes_inicial/ano_inicial e mes_final/ano_final, formatados como um insight.
+    """
+    # valida coluna
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
+    # converte meses
+    mi = mes_map.get(mes_inicial.capitalize())
+    mf = mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
         return {"erro": "Mês inicial ou final inválido."}
 
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) |
+         ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) |
+         ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
         return {"erro": "Nenhum dado encontrado dentro do período especificado."}
 
-    valores_mensais = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            periodo["Mês"].astype(str),
-            periodo["Ano"].astype(str),
-            periodo[coluna]
-        )
-    ]
-
-    total = round(sum(list(v.values())[0] for v in valores_mensais), 2)
+    # monta listas para o gráfico
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
+    total_acumulado = round(sum(valores), 2)
 
     return {
-        "dados": valores_mensais,
-        "valor_total": total
+        "tipo": "barra",
+        "titulo": f"Total de {coluna} de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}: {total_acumulado}",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": valores
     }
 
+@normalize_insights
 def get_Total_Ultimo(coluna: str, meses: int) -> dict:
-    """Retorna a soma dos valores da coluna especificada nos últimos N meses, com dados mensais individuais."""
-
+    """
+    Retorna a soma dos valores da coluna especificada nos últimos N meses,
+    formatado como um insight de barra com dados mensais e total acumulado.
+    """
+    # Validação da coluna
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    ultimos_dados = dados_ordenados.tail(meses)
-
-    if ultimos_dados.empty:
+    # Seleciona os últimos N meses
+    sel = df.sort_values(["Ano", "Mês"]).tail(meses)
+    if sel.empty:
         return {"erro": "Não há dados suficientes para os últimos meses especificados."}
 
-    valores_mensais = [
-        {f"{mes}/{ano}": round(valor, 2)}
-        for mes, ano, valor in zip(
-            ultimos_dados["Mês"].astype(str),
-            ultimos_dados["Ano"].astype(str),
-            ultimos_dados[coluna]
-        )
-    ]
+    # Prepara eixos e valores
+    meses_x = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
+    total = round(sum(valores), 2)
 
-    total = round(sum(list(d.values())[0] for d in valores_mensais), 2)
-
+    # Retorna o insight padronizado
     return {
-        "valor_total": total,
-        "dados": valores_mensais
+        "tipo": "barra",
+        "titulo": f"Total de {coluna} – últimos {meses} meses: {total}",
+        "eixo_x": meses_x,
+        "eixo_y": coluna,
+        "dados": valores
     }
 
 def get_Evolucao(coluna: str) -> dict:
@@ -373,443 +300,537 @@ def get_Evolucao(coluna: str) -> dict:
         "dados": dados
     }
 
-def get_Evolucao_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna a evolução mês a mês da coluna especificada dentro de um período."""
-
+@normalize_insights
+def get_Evolucao_Periodo(
+    coluna: str,
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna a evolução mês a mês da coluna especificada dentro de um período,
+    formatada como um insight de linha.
+    """
+    # valida coluna
     if coluna not in df.columns:
         return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
 
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
+    # converte meses
+    mi = mes_map.get(mes_inicial.capitalize())
+    mf = mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
         return {"erro": "Mês inicial ou final inválido."}
 
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) |
+         ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) |
+         ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
         return {"erro": "Nenhum dado encontrado dentro do período especificado."}
 
-    dados = [
-        {f"{str(m)}/{str(a)}": round(v, 2)}
-        for m, a, v in zip(periodo["Mês"], periodo["Ano"], periodo[coluna])
-    ]
+    # prepara eixos e valores
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
 
-    return {"dados": dados}
-
-def get_Mes_Ano(coluna: str, mes: str, ano: int) -> dict:
-    """Retorna o valor da coluna em um mês e ano específicos."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada."}
-
-    meses = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+    # retorna insight padronizado
+    return {
+        "tipo": "linha",
+        "titulo": f"Evolução de {coluna} de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": valores
     }
 
-    mes_num = meses.get(mes.capitalize())
+@normalize_insights
+def get_Mes_Ano(coluna: str, mes: str, ano: int) -> dict:
+    """
+    Retorna o valor da coluna em um mês e ano específicos,
+    formatado como um insight de pizza (único valor destacado).
+    """
+    # Validação da coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # Converte o nome do mês
+    mi = mes_map.get(mes.capitalize())
+    if mi is None:
+        return {"erro": f"Mês '{mes}' inválido."}
+
+    # Filtra o mês/ano desejado
+    sel = df[(df["Mês"] == mi) & (df["Ano"] == ano)]
+    if sel.empty:
+        return {"erro": f"Nenhum dado encontrado para {mes}/{ano}."}
+
+    # Extrai o valor
+    valor = round(sel[coluna].iloc[0], 2)
+
+    # Retorna insight padronizado
+    return {
+        "tipo": "pizza",
+        "titulo": f"{coluna} em {mes}/{ano}: {valor}",
+        "eixo_x": [],
+        "eixo_y": "",
+        "dados": [{"label": coluna, "value": valor}]
+    }
+
+@normalize_insights
+def get_Crescimento_Percentual(coluna: str) -> dict:
+    """
+    Retorna o crescimento percentual da coluna do primeiro até o último mês,
+    formatado como um insight de barra com o valor inicial e final.
+    """
+    # valida coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # ordena cronologicamente
+    sel = df.sort_values(["Ano", "Mês"])
+    if len(sel) < 2:
+        return {"erro": "Não há dados suficientes para calcular crescimento percentual."}
+
+    # extrai valores
+    valor_inicial = sel[coluna].iloc[0]
+    valor_final   = sel[coluna].iloc[-1]
+    if valor_inicial == 0:
+        return {"erro": "Valor inicial é zero, não é possível calcular variação percentual."}
+
+    # calcula crescimento
+    crescimento = round(((valor_final - valor_inicial) / valor_inicial) * 100, 2)
+
+    # monta insight
+    mes_ini = f"{int(sel['Mês'].iloc[0])}/{int(sel['Ano'].iloc[0])}"
+    mes_fin = f"{int(sel['Mês'].iloc[-1])}/{int(sel['Ano'].iloc[-1])}"
+    return {
+        "tipo": "barra",
+        "titulo": f"Crescimento de {coluna}: {crescimento}%",
+        "eixo_x": [mes_ini, mes_fin],
+        "eixo_y": coluna,
+        "dados": [round(valor_inicial, 2), round(valor_final, 2)]
+    }
+
+@normalize_insights
+def get_Crescimento_Percentual_Periodo(
+    coluna: str,
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna o crescimento percentual da coluna dentro de um período,
+    formatado como um insight de barra com todos os valores mensais e o percentual.
+    """
+    # validação da coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # converte meses
+    mi = mes_map.get(mes_inicial.capitalize())
+    mf = mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) |
+         ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) |
+         ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty or len(sel) < 2:
+        return {"erro": "Período inválido ou com dados insuficientes para calcular o crescimento."}
+
+    # calcula crescimento
+    inicial = sel[coluna].iloc[0]
+    final   = sel[coluna].iloc[-1]
+    if inicial == 0:
+        return {"erro": "Valor inicial é zero; não é possível calcular variação percentual."}
+    pct     = round(((final - inicial) / inicial) * 100, 2)
+
+    # prepara eixos e valores
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    vals  = [round(v, 2) for v in sel[coluna]]
+
+    # monta insight
+    return {
+        "tipo": "barra",
+        "titulo": f"Crescimento de {coluna} de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}: {pct}%",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": vals
+    }
+
+@normalize_insights
+def get_Menor(coluna: str) -> dict:
+    """
+    Retorna o menor valor da coluna especificada, juntamente com todos os dados individuais,
+    formatado como um insight de linha destacando o valor mínimo.
+    """
+    # valida coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # encontra o índice do menor valor
+    sel = df.sort_values(["Ano", "Mês"])
+    idx = sel[coluna].idxmin()
+    linha = sel.loc[idx]
+
+    # lista de meses e valores
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
+
+    # título com o menor valor e sua data
+    valor_min = round(linha[coluna], 2)
+    mes_min   = int(linha["Mês"])
+    ano_min   = int(linha["Ano"])
+    titulo = f"Menor {coluna}: {valor_min} em {mes_min}/{ano_min}"
+
+    return {
+        "tipo": "linha",
+        "titulo": titulo,
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": valores
+    }
+
+@normalize_insights
+def get_Menor_Periodo(
+    coluna: str,
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna o menor valor da coluna especificada dentro de um período,
+    com dados mensais, formatado como um insight de linha.
+    """
+    # validação da coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # converte meses
+    mi = mes_map.get(mes_inicial.capitalize())
+    mf = mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
+    # filtra e ordena período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) |
+         ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) |
+         ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
+
+    # lista de meses e valores
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
+
+    # encontra o menor valor e sua posição
+    idx = sel[coluna].idxmin()
+    linha = sel.loc[idx]
+    valor_min = round(linha[coluna], 2)
+    mes_min   = int(linha["Mês"])
+    ano_min   = int(linha["Ano"])
+
+    # monta insight
+    return {
+        "tipo": "linha",
+        "titulo": f"Menor {coluna} de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}: {valor_min} em {mes_min}/{ano_min}",
+        "eixo_x": meses,
+        "eixo_y": coluna,
+        "dados": valores
+    }
+
+@normalize_insights
+def get_Menor_Ultimo(coluna: str, meses: int) -> dict:
+    """
+    Retorna o menor valor da coluna especificada nos últimos N meses,
+    formatado como um insight de linha com os dados mensais e destaque do mínimo.
+    """
+    # validação da coluna
+    if coluna not in df.columns:
+        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
+
+    # seleciona e ordena os últimos N meses
+    sel = df.sort_values(["Ano", "Mês"]).tail(meses)
+    if sel.empty:
+        return {"erro": "Não há dados suficientes para os últimos meses especificados."}
+
+    # prepara eixos e valores
+    meses_x = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    valores = [round(v, 2) for v in sel[coluna]]
+
+    # encontra o menor valor e sua data
+    idx_min = sel[coluna].idxmin()
+    linha_min = sel.loc[idx_min]
+    valor_min = round(linha_min[coluna], 2)
+    mes_min   = int(linha_min["Mês"])
+    ano_min   = int(linha_min["Ano"])
+
+    # título destacando o mínimo
+    titulo = f"Menor {coluna} — últimos {meses} meses: {valor_min} em {mes_min}/{ano_min}"
+
+    return {
+        "tipo": "linha",
+        "titulo": titulo,
+        "eixo_x": meses_x,
+        "eixo_y": coluna,
+        "dados": valores
+    }
+
+@normalize_insights
+def get_Resumo_Descontos_Periodo(
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna um batch de insights com:
+    1) pizza de Descontos por Tipo no período
+    2) linha da evolução mensal do total de descontos
+    """
+    # valida colunas
+    colunas = ["INSS (R$)", "IRRF (R$)", "Plano de Saúde"]
+    for c in colunas:
+        if c not in df.columns:
+            return {"erro": f"A coluna de desconto '{c}' não foi encontrada na base de dados."}
+    # converte meses
+    mi, mf = mes_map.get(mes_inicial.capitalize()), mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
+        return {"erro": "Mês inicial ou final inválido."}
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) | ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) | ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
+    # cálculo por tipo
+    soma_por_tipo = {c: round(sel[c].sum(), 2) for c in colunas}
+    # cálculo mensal total
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    totais = [round(sel.loc[i, colunas].sum(), 2) for i in sel.index]
+    # monta insights
+    insight_tipo = {
+        "tipo": "pizza",
+        "titulo": f"Descontos por Tipo de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}",
+        "eixo_x": [],
+        "eixo_y": "",
+        "dados": [{"label": k, "value": v} for k, v in soma_por_tipo.items()]
+    }
+    insight_mensal = {
+        "tipo": "linha",
+        "titulo": f"Evolução Mensal dos Descontos ({mes_inicial}/{ano_inicial}–{mes_final}/{ano_final})",
+        "eixo_x": meses,
+        "eixo_y": "Total Descontos (R$)",
+        "dados": totais
+    }
+    return {"insights": [insight_tipo, insight_mensal]}
+
+@normalize_insights
+def get_Resumo_Vencimentos_Periodo(
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna um batch de insights com:
+    1) pizza de Vencimentos por Tipo no período
+    2) linha da evolução mensal do total de vencimentos
+    """
+    # valida colunas de vencimento
+    cols = ["Salário Base", "Comissão", "Bonificações", "Horas Extras", "Valores Adicionais"]
+    for c in cols:
+        if c not in df.columns:
+            return {"erro": f"A coluna de vencimento '{c}' não foi encontrada na base de dados."}
+
+    # converte meses
+    mi, mf = mes_map.get(mes_inicial.capitalize()), mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) | ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) | ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
+
+    # soma por tipo de vencimento
+    soma_tipo = {c: round(sel[c].sum(), 2) for c in cols}
+    # evolução mensal total
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    totais = [round(sel.loc[i, cols].sum(), 2) for i in sel.index]
+
+    insight_tipo = {
+        "tipo": "pizza",
+        "titulo": f"Vencimentos por Tipo de {mes_inicial}/{ano_inicial} a {mes_final}/{ano_final}",
+        "eixo_x": [],
+        "eixo_y": "",
+        "dados": [{"label": k, "value": v} for k, v in soma_tipo.items()]
+    }
+    insight_mensal = {
+        "tipo": "linha",
+        "titulo": f"Evolução Mensal dos Vencimentos ({mes_inicial}/{ano_inicial}–{mes_final}/{ano_final})",
+        "eixo_x": meses,
+        "eixo_y": "Total Vencimentos (R$)",
+        "dados": totais
+    }
+
+    return {"insights": [insight_tipo, insight_mensal]}
+
+@normalize_insights
+def get_Resumo_Folha_Periodo(
+    mes_inicial: str,
+    ano_inicial: int,
+    mes_final: str,
+    ano_final: int
+) -> dict:
+    """
+    Retorna um batch de insights com:
+    1) pizza de Resumo Geral (vencimentos × descontos × líquido)
+    2) pizza de Vencimentos por Tipo
+    3) pizza de Descontos por Tipo
+    4) linha de Líquido Mês a Mês
+    """
+    # valida colunas
+    col_venc = ["Salário Base", "Comissão", "Bonificações", "Horas Extras", "Valores Adicionais"]
+    col_desc = ["INSS (R$)", "IRRF (R$)", "Plano de Saúde"]
+    for c in col_venc + col_desc:
+        if c not in df.columns:
+            return {"erro": f"A coluna '{c}' não foi encontrada na base de dados."}
+
+    # converte meses
+    mi = mes_map.get(mes_inicial.capitalize())
+    mf = mes_map.get(mes_final.capitalize())
+    if mi is None or mf is None:
+        return {"erro": "Mês inicial ou final inválido."}
+
+    # filtra período
+    dfp = df.sort_values(["Ano", "Mês"])
+    mask = (
+        ((dfp["Ano"] > ano_inicial) |
+         ((dfp["Ano"] == ano_inicial) & (dfp["Mês"] >= mi)))
+        &
+        ((dfp["Ano"] < ano_final) |
+         ((dfp["Ano"] == ano_final) & (dfp["Mês"] <= mf)))
+    )
+    sel = dfp[mask]
+    if sel.empty:
+        return {"erro": "Nenhum dado encontrado no período especificado."}
+
+    # cálculos gerais
+    total_v = round(sel[col_venc].sum().sum(), 2)
+    total_d = round(sel[col_desc].sum().sum(), 2)
+    total_l = round(sel["Líquido a Receber"].sum(), 2)
+
+    # 1) pizza resumo geral
+    insight1 = {
+        "tipo": "pizza",
+        "titulo": f"Resumo Geral {mes_inicial}/{ano_inicial}–{mes_final}/{ano_final}",
+        "eixo_x": [],
+        "eixo_y": "",
+        "dados": [
+            {"label": "Vencimentos", "value": total_v},
+            {"label": "Descontos",   "value": total_d},
+            {"label": "Líquido",      "value": total_l},
+        ]
+    }
+
+    # 2) pizza vencimentos por tipo
+    insight2 = {
+        "tipo": "pizza",
+        "titulo": f"Vencimentos por Tipo ({mes_inicial}/{ano_inicial}–{mes_final}/{ano_final})",
+        "eixo_x": [], "eixo_y": "",
+        "dados": [
+            {"label": c, "value": round(sel[c].sum(), 2)}
+            for c in col_venc
+        ]
+    }
+
+    # 3) pizza descontos por tipo
+    insight3 = {
+        "tipo": "pizza",
+        "titulo": f"Descontos por Tipo ({mes_inicial}/{ano_inicial}–{mes_final}/{ano_final})",
+        "eixo_x": [], "eixo_y": "",
+        "dados": [
+            {"label": c, "value": round(sel[c].sum(), 2)}
+            for c in col_desc
+        ]
+    }
+
+    # 4) linha líquido mês a mês
+    meses = [f"{m}/{a}" for m, a in zip(sel["Mês"], sel["Ano"])]
+    liquidos = [round(v, 2) for v in sel["Líquido a Receber"]]
+    insight4 = {
+        "tipo": "linha",
+        "titulo": f"Líquido Mês a Mês ({mes_inicial}/{ano_inicial}–{mes_final}/{ano_final})",
+        "eixo_x": meses,
+        "eixo_y": "Líquido (R$)",
+        "dados": liquidos
+    }
+
+    return {"insights": [insight1, insight2, insight3, insight4]}
+
+
+@normalize_insights
+def get_Participacao_Vencimentos(
+    colunas: List[str],
+    mes: str,
+    ano: int
+) -> dict:
+    """
+    Gera um insight de pizza com a participação percentual
+    de cada coluna de vencimento em um mês/ano específico.
+    """
+    # converte mês
+    mes_num = mes_map.get(mes.capitalize())
     if mes_num is None:
         return {"erro": f"Mês '{mes}' inválido."}
 
-    dados_filtrados = df[(df["Mês"] == mes_num) & (df["Ano"] == ano)]
+    linha = df[(df["Mês"] == mes_num) & (df["Ano"] == ano)]
+    if linha.empty:
+        return {"erro": f"Sem dados para {mes}/{ano}."}
 
-    if dados_filtrados.empty:
-        return {"erro": f"Nenhum dado encontrado para {mes}/{ano}."}
+    linha = linha.iloc[0]
+    dados = []
+    for col in colunas:
+        if col in df.columns:
+            dados.append({"label": col, "value": round(linha[col], 2)})
+        else:
+            return {"erro": f"Coluna '{col}' não existe."}
 
-    valor = round(dados_filtrados[coluna].values[0], 2)
-
+    titulo = f"Participação dos vencimentos em {mes}/{ano}"
     return {
-        "mes_ano": f"{mes}/{ano}",
-        "valor": valor
-    }
-
-def get_Crescimento_Percentual(coluna: str) -> dict:
-    """Retorna o crescimento percentual da coluna do primeiro até o último mês."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    if len(dados_ordenados) < 2:
-        return {"erro": "Não há dados suficientes para calcular crescimento percentual."}
-
-    valor_inicial = dados_ordenados[coluna].iloc[0]
-    valor_final = dados_ordenados[coluna].iloc[-1]
-
-    if valor_inicial == 0:
-        return {"crescimento_percentual": None, "erro": "Valor inicial é zero, não é possível calcular a variação percentual."}
-
-    crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
-
-    return {
-        "valor_inicial": round(valor_inicial, 2),
-        "valor_final": round(valor_final, 2),
-        "crescimento_percentual": round(crescimento, 2)
-    }
-
-def get_Crescimento_Percentual_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o crescimento percentual da coluna dentro de um período, junto com os dados mensais."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty or len(periodo) < 2:
-        return {"erro": "Período inválido ou com dados insuficientes para calcular o crescimento."}
-
-    valor_inicial = periodo[coluna].iloc[0]
-    valor_final = periodo[coluna].iloc[-1]
-
-    if valor_inicial == 0:
-        return {"crescimento_percentual": None, "erro": "Valor inicial é zero, não é possível calcular a variação percentual."}
-
-    crescimento = ((valor_final - valor_inicial) / valor_inicial) * 100
-
-    dados = [
-        {f"{str(mes)}/{str(ano)}": round(valor, 2)}
-        for mes, ano, valor in zip(periodo["Mês"], periodo["Ano"], periodo[coluna])
-    ]
-
-    return {
-        "valor_inicial": round(valor_inicial, 2),
-        "valor_final": round(valor_final, 2),
-        "crescimento_percentual": round(crescimento, 2),
+        "tipo": "pizza",
+        "titulo": titulo,
+        "eixo_x": [],
+        "eixo_y": "",
         "dados": dados
     }
-
-def get_Menor(coluna: str) -> dict:
-    """Retorna o menor valor da coluna especificada, juntamente com seu mês/ano e todos os dados individuais."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    idx_menor = df[coluna].idxmin()
-    linha_menor = df.loc[idx_menor]
-
-    valor = round(linha_menor[coluna], 2)
-    mes = str(linha_menor["Mês"])
-    ano = str(linha_menor["Ano"])
-
-    dados = [
-        {f"{m}/{a}": round(v, 2)}
-        for m, a, v in zip(
-            df["Mês"].astype(str),
-            df["Ano"].astype(str),
-            df[coluna]
-        )
-    ]
-
-    return {
-        "menor_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": dados
-    }
-
-def get_Menor_Periodo(coluna: str, mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna o menor valor da coluna especificada dentro de um período, com mês/ano e os dados do período."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    idx_menor = periodo[coluna].idxmin()
-    linha_menor = periodo.loc[idx_menor]
-
-    valor = round(linha_menor[coluna], 2)
-    mes = str(linha_menor["Mês"])
-    ano = str(linha_menor["Ano"])
-
-    dados = [
-        {f"{m}/{a}": round(v, 2)}
-        for m, a, v in zip(periodo["Mês"].astype(str), periodo["Ano"].astype(str), periodo[coluna])
-    ]
-
-    return {
-        "menor_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": dados
-    }
-
-def get_Menor_Ultimo(coluna: str, meses: int) -> dict:
-    """Retorna o menor valor da coluna nos últimos N meses, com mês/ano e todos os dados individuais do período."""
-
-    if coluna not in df.columns:
-        return {"erro": f"Coluna '{coluna}' não encontrada na base de dados."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-    ultimos_dados = dados_ordenados.tail(meses)
-
-    if ultimos_dados.empty:
-        return {"erro": "Não há dados suficientes para os últimos meses especificados."}
-
-    idx_menor = ultimos_dados[coluna].idxmin()
-    linha_menor = ultimos_dados.loc[idx_menor]
-
-    valor = round(linha_menor[coluna], 2)
-    mes = str(linha_menor["Mês"])
-    ano = str(linha_menor["Ano"])
-
-    dados = [
-        {f"{m}/{a}": round(v, 2)}
-        for m, a, v in zip(
-            ultimos_dados["Mês"].astype(str),
-            ultimos_dados["Ano"].astype(str),
-            ultimos_dados[coluna]
-        )
-    ]
-
-    return {
-        "menor_valor": valor,
-        "mes": mes,
-        "ano": ano,
-        "dados": dados
-    }
-
-def get_Resumo_Descontos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna um resumo detalhado dos descontos por tipo e por mês, dentro de um período especificado."""
-
-    colunas_desconto = ["INSS (R$)", "IRRF (R$)", "Plano de Saúde"]
-
-    for coluna in colunas_desconto:
-        if coluna not in df.columns:
-            return {"erro": f"A coluna de desconto '{coluna}' não foi encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    resumo = {
-        "total_descontos": round(periodo[colunas_desconto].sum().sum(), 2),
-        "por_tipo": {
-            coluna: round(periodo[coluna].sum(), 2) for coluna in colunas_desconto
-        },
-        "mensal": [
-            {
-                "mes_ano": f"{mes}/{ano}",
-                "INSS (R$)": round(inss, 2),
-                "IRRF (R$)": round(irrf, 2),
-                "Plano de Saúde": round(saude, 2)
-            }
-            for mes, ano, inss, irrf, saude in zip(
-                periodo["Mês"].astype(str),
-                periodo["Ano"].astype(str),
-                periodo["INSS (R$)"],
-                periodo["IRRF (R$)"],
-                periodo["Plano de Saúde"]
-            )
-        ]
-    }
-
-    return resumo
-
-def get_Resumo_Vencimentos_Periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna um resumo detalhado dos vencimentos por tipo e por mês, dentro de um período especificado."""
-
-    colunas_vencimentos = ["Salário Base", "Comissão", "Bonificações", "Horas Extras", "Valores Adicionais"]
-
-    for coluna in colunas_vencimentos:
-        if coluna not in df.columns:
-            return {"erro": f"A coluna de vencimento '{coluna}' não foi encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_inicial_num = mes_map.get(mes_inicial.capitalize())
-    mes_final_num = mes_map.get(mes_final.capitalize())
-
-    if mes_inicial_num is None or mes_final_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_inicial_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_final_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado dentro do período especificado."}
-
-    resumo = {
-        "total_vencimentos": round(periodo[colunas_vencimentos].sum().sum(), 2),
-        "por_tipo": {
-            coluna: round(periodo[coluna].sum(), 2) for coluna in colunas_vencimentos
-        },
-        "mensal": [
-            {
-                "mes_ano": f"{mes}/{ano}",
-                "Salário Base": round(sb, 2),
-                "Comissão": round(c, 2),
-                "Bonificações": round(b, 2),
-                "Horas Extras": round(he, 2),
-                "Valores Adicionais": round(va, 2)
-            }
-            for mes, ano, sb, c, b, he, va in zip(
-                periodo["Mês"].astype(str),
-                periodo["Ano"].astype(str),
-                periodo["Salário Base"],
-                periodo["Comissão"],
-                periodo["Bonificações"],
-                periodo["Horas Extras"],
-                periodo["Valores Adicionais"]
-            )
-        ]
-    }
-
-    return resumo
-
-def get_Resumo_Folha_Periodo(mes_inicial: str, ano_inicial: int, mes_final: str, ano_final: int) -> dict:
-    """Retorna um resumo completo da folha de pagamento (vencimentos, descontos e líquido) no período especificado."""
-
-    col_venc = ["Salário Base", "Comissão", "Bonificações", "Horas Extras", "Valores Adicionais"]
-    col_desc = ["INSS (R$)", "IRRF (R$)", "Plano de Saúde"]
-
-    for coluna in col_venc + col_desc:
-        if coluna not in df.columns:
-            return {"erro": f"A coluna '{coluna}' não foi encontrada na base de dados."}
-
-    mes_map = {
-        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
-        "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
-        "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-    }
-
-    mes_ini_num = mes_map.get(mes_inicial.capitalize())
-    mes_fim_num = mes_map.get(mes_final.capitalize())
-
-    if mes_ini_num is None or mes_fim_num is None:
-        return {"erro": "Mês inicial ou final inválido."}
-
-    dados_ordenados = df.sort_values(by=["Ano", "Mês"])
-
-    periodo = dados_ordenados[
-        (dados_ordenados["Ano"] > ano_inicial) |
-        ((dados_ordenados["Ano"] == ano_inicial) & (dados_ordenados["Mês"] >= mes_ini_num))
-    ]
-    periodo = periodo[
-        (periodo["Ano"] < ano_final) |
-        ((periodo["Ano"] == ano_final) & (periodo["Mês"] <= mes_fim_num))
-    ]
-
-    if periodo.empty:
-        return {"erro": "Nenhum dado encontrado no período especificado."}
-
-    resumo = {
-        "total_vencimentos": round(periodo[col_venc].sum().sum(), 2),
-        "total_descontos": round(periodo[col_desc].sum().sum(), 2),
-        "liquido_a_receber": round(periodo["Líquido a Receber"].sum(), 2),
-        "por_tipo_vencimento": {
-            coluna: round(periodo[coluna].sum(), 2) for coluna in col_venc
-        },
-        "por_tipo_desconto": {
-            coluna: round(periodo[coluna].sum(), 2) for coluna in col_desc
-        },
-        "mensal": [
-            {
-                "mes_ano": f"{mes}/{ano}",
-                "vencimentos": round(sum([linha[c] for c in col_venc]), 2),
-                "descontos": round(sum([linha[c] for c in col_desc]), 2),
-                "liquido": round(linha["Líquido a Receber"], 2)
-            }
-            for _, linha in periodo.iterrows()
-            for mes, ano in [(str(linha["Mês"]), str(linha["Ano"]))]
-        ]
-    }
-
-    return resumo

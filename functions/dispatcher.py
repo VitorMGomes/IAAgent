@@ -48,6 +48,8 @@ def call_function(name: str, arguments: dict) -> dict:
                 return get_Resumo_Vencimentos_Periodo(**arguments)
             case "get_Resumo_Folha_Periodo":
                 return get_Resumo_Folha_Periodo(**arguments)
+            case "get_Participacao_Vencimentos":
+                return  get_Participacao_Vencimentos(**arguments)
             case _:
                 return {"erro": f"Função '{name}' não implementada."}
     except Exception as e:
