@@ -1,8 +1,0 @@
-Qual foi a média exata de salario base de janeiro a maio de 2022?
-Qual o total de horas extras no primeiro semestre de 2021?
-Quais foram os totais mensais de descontos (INSS, IRRF, Plano de Saúde) de julho a dezembro de 2020?
-Qual foi a evolução mês a mês da comissao ao longo de 2020?
-Como variou o salario base nos últimos 12 meses?
-Qual a participação percentual de cada tipo de vencimento (Salário Base, Comissão, Bonificações, Horas Extras, Valores Adicionais) em maio de 2021?
-Como se distribuem os descontos (INSS, IRRF, Plano de Saúde) de janeiro a março de 2022?
-Qual foi o total de horas extras de janeiro a junho de 2021?
