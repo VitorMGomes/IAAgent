@@ -20,7 +20,7 @@ Um agente de inteligência artificial desenvolvido em Python que responde dúvid
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seuusuario/slip-pay-agent.git
+git clone https://github.com/VitorMGomes/IAAgent.git
 cd slip-pay-agent
 ```
 ### 2. Crie e ative um ambiente virtual
