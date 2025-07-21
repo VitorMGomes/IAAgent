@@ -9,7 +9,10 @@ import os
 st.set_page_config(page_title="Página Inicial", page_icon="🏠", layout="wide")
 st.title("🏠 Página Inicial")
 
+# ------------------------------------------------------------------
 # --- Carrega dados do colaborador via API ---
+# ------------------------------------------------------------------
+
 @st.cache_data
 def carregar_dados():
     url = "http://127.0.0.1:8000/dados"
@@ -24,11 +27,14 @@ df = carregar_dados()
 
 if df.empty:
     st.stop()
-
+# ------------------------------------------------------------------
 # Simula a seleção do primeiro colaborador
+# ------------------------------------------------------------------
 colab = df.iloc[0]
 
+# ------------------------------------------------------------------
 # --- Layout da Home ---
+# ------------------------------------------------------------------
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -44,8 +50,9 @@ with col1:
 
 with col2:
     st.markdown("### 📊 Visão Geral Rápida")
-
+    # ------------------------------------------------------------------
     # --- Simulação de dados temporários para gráficos ---
+    # ------------------------------------------------------------------
     df_salario = pd.DataFrame({
         "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
         "Salário Bruto": [3100, 3200, 3150, 3300, 3400, 3500]
