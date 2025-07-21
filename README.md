@@ -10,7 +10,6 @@ Um agente de inteligência artificial desenvolvido em Python que responde dúvid
 - 📊 Geração automática de gráficos com base nas perguntas
 - 💬 Interface de conversa com IA (usando OpenAI + function calling)
 - 📁 Recuperação de documentos explicativos via RAG (ChromaDB)
-- 🔐 Acesso individualizado por colaborador (apenas seus próprios dados)
 - 🧠 Suporte a perguntas técnicas com base em documentos indexados (ex: FGTS, IRRF)
 - 🧾 Processamento da folha de pagamento em CSV
 
