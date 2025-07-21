@@ -4,11 +4,13 @@ pandas
 python-dotenv
 openai
 pydantic
+requests
+matplotlib
+plotly
+Pillow
+streamlit
 langchain>=0.2.0
 langchain-openai
 langchain-chroma
 langchain-community
 tiktoken
-streamlit
-matplotlib
-plotly
