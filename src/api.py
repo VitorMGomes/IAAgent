@@ -15,8 +15,11 @@ from functions.dispatcher import call_function
 # ------------------------------------------------------------------
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+csv_path = os.path.join(base_dir, "src", "data", "Dados.csv")
 
-df = pd.read_csv("data/Dados.csv")
+
+df = pd.read_csv(csv_path)
 cabecalho = df.columns.tolist()
 
 app = FastAPI()

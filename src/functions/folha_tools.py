@@ -7,7 +7,13 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 
 # Carrega variáveis de ambiente e dados
 load_dotenv()
-df = pd.read_csv("data/Dados.csv")
+
+# Caminho absoluto até o CSV
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+csv_path = os.path.join(base_dir, "data", "Dados.csv")
+
+# Carrega o CSV
+df = pd.read_csv(csv_path)
 
 # Normaliza meses para números
 mes_map = {

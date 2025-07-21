@@ -1,11 +1,15 @@
 import subprocess
 import time
 
-api_process = subprocess.Popen(["uvicorn", "api:app", "--reload"])
+# Inicia o servidor FastAPI com uvicorn apontando para src.api:app
+api_process = subprocess.Popen(["uvicorn", "src.api:app", "--reload"])
 
+# Aguarda a API subir antes de iniciar o Streamlit
 time.sleep(2)
 
-streamlit_process = subprocess.Popen(["streamlit", "run", "ui/Home.py"])
+# Inicia o Streamlit apontando para src/ui/Home.py
+streamlit_process = subprocess.Popen(["streamlit", "run", "src/ui/Home.py"])
 
+# Aguarda os dois processos finalizarem
 api_process.wait()
 streamlit_process.wait()
