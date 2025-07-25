@@ -1,4 +1,4 @@
-# 🤖 Slip Pay-Agent
+# 🤖 Pay Slip Agent
 
 Um agente de inteligência artificial desenvolvido em Python que responde dúvidas sobre a **folha de pagamento de colaboradores** de forma personalizada e visual. O sistema une **FastAPI**, **Streamlit** e **OpenAI** para oferecer uma experiência interativa com **gráficos automatizados**, **respostas inteligentes** e **visualização de dados salariais**.
 
