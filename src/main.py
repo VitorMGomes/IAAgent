@@ -2,17 +2,40 @@ import subprocess
 import time
 import requests
 import os
+import platform
 
 def kill_processes_on_ports():
-    """Mata processos usando as portas 8000 e 8501"""
+    """Mata processos usando as portas 8000 e 8501 - multiplataforma"""
     try:
-        # Mata processos uvicorn na porta 8000
-        subprocess.run(["pkill", "-f", "uvicorn.*src.api:app"], capture_output=True, check=False)
-        # Mata processos streamlit na porta 8501  
-        subprocess.run(["pkill", "-f", "streamlit.*src/ui/Home.py"], capture_output=True, check=False)
-        # Libera portas usando fuser se disponível
-        subprocess.run(["fuser", "-k", "8000/tcp"], capture_output=True, check=False)
-        subprocess.run(["fuser", "-k", "8501/tcp"], capture_output=True, check=False)
+        system = platform.system().lower()
+        
+        if system == "windows":
+            # Windows: usa taskkill e netstat
+            subprocess.run(["taskkill", "/f", "/im", "uvicorn.exe"], capture_output=True, check=False)
+            subprocess.run(["taskkill", "/f", "/im", "streamlit.exe"], capture_output=True, check=False)
+            # Mata processos específicos nas portas (Windows)
+            for port in [8000, 8501]:
+                try:
+                    result = subprocess.run(
+                        ["netstat", "-ano"], 
+                        capture_output=True, text=True, check=False
+                    )
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if f":{port}" in line and "LISTENING" in line:
+                            parts = line.strip().split()
+                            if len(parts) > 4:
+                                pid = parts[-1]
+                                subprocess.run(["taskkill", "/f", "/pid", pid], capture_output=True, check=False)
+                except Exception:
+                    pass
+        else:
+            # Linux/macOS: usa pkill e fuser
+            subprocess.run(["pkill", "-f", "uvicorn.*src.api:app"], capture_output=True, check=False)
+            subprocess.run(["pkill", "-f", "streamlit.*src/ui/Home.py"], capture_output=True, check=False)
+            subprocess.run(["fuser", "-k", "8000/tcp"], capture_output=True, check=False)
+            subprocess.run(["fuser", "-k", "8501/tcp"], capture_output=True, check=False)
+            
         time.sleep(2)
     except Exception as e:
         print(f"Aviso: Erro ao finalizar processos anteriores: {e}")
@@ -22,15 +45,31 @@ project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 src_dir = os.path.join(project_dir, "src")
 venv_dir = os.path.join(project_dir, "venv")
 
-# Caminhos para executáveis do ambiente virtual
-python_executable = os.path.join(venv_dir, "bin", "python")
-uvicorn_executable = os.path.join(venv_dir, "bin", "uvicorn")
-streamlit_executable = os.path.join(venv_dir, "bin", "streamlit")
+# Detecta o sistema operacional
+system = platform.system().lower()
+is_windows = system == "windows"
+
+# Caminhos para executáveis do ambiente virtual (multiplataforma)
+if is_windows:
+    scripts_dir = os.path.join(venv_dir, "Scripts")
+    python_executable = os.path.join(scripts_dir, "python.exe")
+    uvicorn_executable = os.path.join(scripts_dir, "uvicorn.exe")
+    streamlit_executable = os.path.join(scripts_dir, "streamlit.exe")
+    path_separator = ";"
+else:
+    bin_dir = os.path.join(venv_dir, "bin")
+    python_executable = os.path.join(bin_dir, "python")
+    uvicorn_executable = os.path.join(bin_dir, "uvicorn")
+    streamlit_executable = os.path.join(bin_dir, "streamlit")
+    path_separator = ":"
 
 # Verifica se o ambiente virtual existe
 if not os.path.exists(python_executable):
     print(f"ERRO: Ambiente virtual não encontrado em {venv_dir}")
-    print("Execute: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt")
+    if is_windows:
+        print("Execute: python -m venv venv && venv\\Scripts\\activate && pip install -r requirements.txt")
+    else:
+        print("Execute: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt")
     exit(1)
 
 # Verifica se arquivos críticos existem
@@ -54,7 +93,7 @@ kill_processes_on_ports()
 
 # Configura o ambiente
 env = os.environ.copy()
-env["PYTHONPATH"] = project_dir + ":" + src_dir
+env["PYTHONPATH"] = project_dir + path_separator + src_dir
 
 # Muda para o diretório do projeto para garantir caminhos relativos corretos
 os.chdir(project_dir)
