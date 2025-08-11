@@ -24,8 +24,9 @@ mes_map = {
 df["Mês"] = df["Mês"].map(mes_map)
 
 # Configuração do RAG
+chroma_dir = os.path.join(base_dir, "chrome_langchain_db")
 retriever = Chroma(
-    persist_directory="./chrome_langchain_db",
+    persist_directory=chroma_dir,
     embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
 ).as_retriever()
 rag_chain = RetrievalQA.from_chain_type(
